@@ -1,0 +1,13 @@
+{
+  "name": "오답노트",
+  "short_name": "오답노트",
+  "description": "우리 아이 오답을 사진으로 기록하고 통계로 관리하는 노트",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#F5F5FB",
+  "theme_color": "#6C5CE7",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
