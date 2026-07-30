@@ -94,6 +94,15 @@
   /* ---------- 목록 ---------- */
   .filter-bar{display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; margin-bottom:12px;}
   .filter-bar select{width:auto; flex-shrink:0; padding:9px 12px; font-size:12.5px; font-weight:600; background:var(--surface);}
+  .toggle-chip-row{display:flex; gap:8px; margin-bottom:12px;}
+  .toggle-chip{display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; color:var(--text-sub); background:var(--surface); border:1.5px solid var(--border); border-radius:20px; padding:7px 14px; cursor:pointer;}
+  .toggle-chip:has(input:checked){color:var(--primary); border-color:var(--primary); background:var(--primary-soft);}
+  .mini-bar-row{display:flex; align-items:center; gap:10px; padding:8px 0;}
+  .mini-bar-row .mini-label{font-size:12.5px; font-weight:700; width:64px; flex-shrink:0;}
+  .mini-bar-track{flex:1; height:10px; background:var(--bg); border-radius:6px; overflow:hidden;}
+  .mini-bar-fill{height:100%; border-radius:6px;}
+  .mini-bar-row .mini-count{font-size:12px; color:var(--text-sub); width:28px; text-align:right; flex-shrink:0;}
+  .star-btn{border:none; background:none; font-size:20px; cursor:pointer; line-height:1; padding:2px;}
   .entry-card{background:var(--surface); border-radius:16px; padding:16px; margin-bottom:12px; box-shadow:var(--shadow);}
   .entry-top{display:flex; justify-content:space-between; align-items:flex-start; gap:8px;}
   .entry-q{font-size:14.5px; font-weight:700; line-height:1.4; margin:8px 0 6px;}
@@ -146,11 +155,20 @@
       <div class="stat-grid">
         <div class="stat-box"><div class="num" id="homeTotal">0</div><div class="label">누적 오답</div></div>
         <div class="stat-box"><div class="num" id="homeWeek">0</div><div class="label">이번 주 추가</div></div>
+        <div class="stat-box"><div class="num" id="homeGraduated">0</div><div class="label">🎓 졸업한 문제</div></div>
+        <div class="stat-box"><div class="num" id="homeStarred">0</div><div class="label">⭐ 즐겨찾기</div></div>
       </div>
       <button class="quick-add-btn" onclick="switchTab('add')">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>
         오답 사진 추가하기
       </button>
+
+      <div class="section-title">과목별 현황</div>
+      <div class="card" id="homeSubjectMini"></div>
+
+      <div class="section-title">가장 약한 단원 TOP 3</div>
+      <div class="card" id="homeUnitMini"></div>
+
       <div class="section-title">최근 추가한 오답</div>
       <div class="card" id="recentList"><div class="empty"><div class="emoji">📝</div>아직 등록된 오답이 없어요</div></div>
     </section>
@@ -210,6 +228,10 @@
           <option value="7">최근 7일</option>
           <option value="30">최근 30일</option>
         </select>
+      </div>
+      <div class="toggle-chip-row">
+        <label class="toggle-chip"><input type="checkbox" id="filterStarredOnly" /> ⭐ 즐겨찾기만</label>
+        <label class="toggle-chip"><input type="checkbox" id="filterShowGraduated" /> 🎓 졸업 포함</label>
       </div>
       <div id="listArea"></div>
     </section>
@@ -619,6 +641,9 @@ window.saveAllEntries = async function(){
       reason: p.reason || reasons[0] || '기타',
       retried: false,
       retriedCorrect: null,
+      starred: false,
+      consecutiveCorrect: 0,
+      graduated: false,
       createdAt: serverTimestamp()
     })));
     showToast(`오답 ${problemCards.length}개 저장했어요 ✓`);
@@ -651,6 +676,42 @@ function renderHome(){
   const weekAgo = Date.now() - 7*24*60*60*1000;
   const weekCount = entries.filter(e => e.createdAt && e.createdAt.toDate && e.createdAt.toDate().getTime() > weekAgo).length;
   document.getElementById('homeWeek').textContent = weekCount;
+  document.getElementById('homeGraduated').textContent = entries.filter(e => e.graduated).length;
+  document.getElementById('homeStarred').textContent = entries.filter(e => e.starred).length;
+
+  const palette = ['#6C5CE7','#4C7CF0','#E85D8C','#F0924C','#1FAE7A','#8B90A0'];
+
+  const subjMiniWrap = document.getElementById('homeSubjectMini');
+  const bySubject = {};
+  entries.forEach(e => { const s = e.subject||'기타'; bySubject[s] = (bySubject[s]||0)+1; });
+  const subjEntries = Object.entries(bySubject).sort((a,b) => b[1]-a[1]);
+  if (subjEntries.length === 0){
+    subjMiniWrap.innerHTML = `<div class="empty"><div class="emoji">📊</div>아직 데이터가 없어요</div>`;
+  } else {
+    const max = subjEntries[0][1];
+    subjMiniWrap.innerHTML = subjEntries.map(([s,count], i) => `
+      <div class="mini-bar-row">
+        <div class="mini-label">${s}</div>
+        <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${(count/max*100).toFixed(0)}%; background:${palette[i%palette.length]}"></div></div>
+        <div class="mini-count">${count}</div>
+      </div>`).join('');
+  }
+
+  const unitMiniWrap = document.getElementById('homeUnitMini');
+  const byUnit = {};
+  entries.forEach(e => { if (e.unit) byUnit[e.unit] = (byUnit[e.unit]||0)+1; });
+  const unitEntries = Object.entries(byUnit).sort((a,b) => b[1]-a[1]).slice(0,3);
+  if (unitEntries.length === 0){
+    unitMiniWrap.innerHTML = `<div class="empty"><div class="emoji">📘</div>단원 정보가 있는 오답이 아직 없어요</div>`;
+  } else {
+    const max = unitEntries[0][1];
+    unitMiniWrap.innerHTML = unitEntries.map(([u,count], i) => `
+      <div class="mini-bar-row">
+        <div class="mini-label">${u}</div>
+        <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${(count/max*100).toFixed(0)}%; background:#E02020"></div></div>
+        <div class="mini-count">${count}</div>
+      </div>`).join('');
+  }
 
   const recentWrap = document.getElementById('recentList');
   const recent = entries.slice(0, 5);
@@ -663,6 +724,7 @@ function renderHome(){
     return `<div class="recent-item">
       <span class="tag" style="background:${c[0]};color:${c[1]}">${e.subject||'기타'}</span>
       <div class="txt"><div class="q">${escapeHtml(e.questionText||'(내용 없음)')}</div><div class="d">${e.date||''}</div></div>
+      ${e.starred ? '<span>⭐</span>' : ''}
     </div>`;
   }).join('');
 }
@@ -675,6 +737,7 @@ function fillFilterOptions(){
   subjSel.innerHTML = `<option value="">전체 과목</option>` + subjects.map(s => `<option value="${s}" ${s===current?'selected':''}>${s}</option>`).join('');
 }
 ['filterGrade','filterSubject','filterReason','filterDifficulty','filterRange'].forEach(id => document.getElementById(id).addEventListener('change', renderList));
+['filterStarredOnly','filterShowGraduated'].forEach(id => document.getElementById(id).addEventListener('change', renderList));
 
 function renderList(){
   const grade = document.getElementById('filterGrade').value;
@@ -682,11 +745,15 @@ function renderList(){
   const reason = document.getElementById('filterReason').value;
   const difficulty = document.getElementById('filterDifficulty').value;
   const range = document.getElementById('filterRange').value;
+  const starredOnly = document.getElementById('filterStarredOnly').checked;
+  const showGraduated = document.getElementById('filterShowGraduated').checked;
   let filtered = entries.filter(e => {
     if (grade && e.grade !== grade) return false;
     if (subj && e.subject !== subj) return false;
     if (reason && e.reason !== reason) return false;
     if (difficulty && e.difficulty !== difficulty) return false;
+    if (starredOnly && !e.starred) return false;
+    if (!showGraduated && e.graduated) return false;
     if (range !== 'all'){
       const days = parseInt(range);
       const cutoff = Date.now() - days*24*60*60*1000;
@@ -708,6 +775,10 @@ function renderList(){
     const unitTag = e.unit ? `<span class="tag" style="background:#F0F0F5;color:#8B90A0">📘 ${e.unit}</span>` : '';
     const diffColors = { '하':['#E4F9F3','#00B894'], '중':['#FFF6E0','#E0A200'], '상':['#FFECEC','#E02020'] };
     const diffTag = e.difficulty ? `<span class="tag" style="background:${(diffColors[e.difficulty]||['#F0F0F5','#8B90A0'])[0]};color:${(diffColors[e.difficulty]||['#F0F0F5','#8B90A0'])[1]}">난이도 ${e.difficulty}</span>` : '';
+    const streak = e.consecutiveCorrect || 0;
+    const streakTag = (streak > 0 && !e.graduated) ? `<span class="tag" style="background:var(--success-soft);color:var(--success)">연속 ${streak}회</span>` : '';
+    const graduatedTag = e.graduated ? `<span class="tag" style="background:#FFF6E0;color:#E0A200">🎓 졸업</span>` : '';
+    const starChar = e.starred ? '⭐' : '☆';
     return `
     <div class="entry-card">
       <div class="entry-top">
@@ -716,25 +787,42 @@ function renderList(){
           ${gradeTag}
           ${unitTag}
           ${diffTag}
+          ${streakTag}
+          ${graduatedTag}
           <span class="tag" style="background:#F0F0F5;color:#8B90A0">${e.date||''}</span>
           <span class="tag" style="background:#F0F0F5;color:#8B90A0">${e.reason||''}</span>
         </div>
+        <button class="star-btn" onclick="toggleStarred('${e.id}', ${!e.starred})">${starChar}</button>
       </div>
       <div class="entry-q">${escapeHtml(e.questionText||'(내용 없음)')}</div>
       <div class="entry-ans"><b>학생 답:</b> ${escapeHtml(e.studentAnswer||'-')} &nbsp;·&nbsp; <b>정답:</b> ${escapeHtml(e.correctAnswer||'-')}</div>
       <div class="entry-actions">
         <button class="icon-btn" onclick="deleteEntry('${e.id}')">🗑 삭제</button>
+        ${e.graduated ? `<button class="icon-btn" onclick="unGraduate('${e.id}')">↩️ 다시 복습에 포함</button>` : ''}
       </div>
+      ${e.graduated ? '' : `
       <div class="retry-toggle">
         <label><input type="checkbox" ${retriedChecked} onchange="toggleRetried('${e.id}', this.checked)"> 다시 풀어봤어요</label>
         <div class="retry-result">
           <button class="ok ${e.retriedCorrect===true?'active':''}" onclick="setRetryResult('${e.id}', true)">맞음</button>
           <button class="no ${e.retriedCorrect===false?'active':''}" onclick="setRetryResult('${e.id}', false)">틀림</button>
         </div>
-      </div>
+      </div>`}
     </div>`;
   }).join('');
 }
+
+window.toggleStarred = async function(id, value){
+  await updateDoc(doc(db, "entries", id), { starred: value });
+  const e = entries.find(x => x.id === id); if (e) e.starred = value;
+  renderList(); renderHome();
+};
+
+window.unGraduate = async function(id){
+  await updateDoc(doc(db, "entries", id), { graduated: false, consecutiveCorrect: 0 });
+  const e = entries.find(x => x.id === id); if (e){ e.graduated = false; e.consecutiveCorrect = 0; }
+  renderList(); renderHome();
+};
 
 window.deleteEntry = async function(id){
   if (!confirm('이 오답을 삭제할까요?')) return;
@@ -751,9 +839,14 @@ window.toggleRetried = async function(id, checked){
 };
 
 window.setRetryResult = async function(id, correct){
-  await updateDoc(doc(db, "entries", id), { retried: true, retriedCorrect: correct });
-  const e = entries.find(x => x.id === id); e.retried = true; e.retriedCorrect = correct;
-  renderList(); renderStats();
+  const e = entries.find(x => x.id === id);
+  const prevStreak = (e && e.consecutiveCorrect) || 0;
+  const newStreak = correct ? prevStreak + 1 : 0;
+  const graduated = newStreak >= 3;
+  await updateDoc(doc(db, "entries", id), { retried: true, retriedCorrect: correct, consecutiveCorrect: newStreak, graduated });
+  if (e){ e.retried = true; e.retriedCorrect = correct; e.consecutiveCorrect = newStreak; e.graduated = graduated; }
+  renderList(); renderStats(); renderHome();
+  if (graduated) showToast('🎓 3번 연속 정답! 이 문제는 졸업했어요');
 };
 
 /* ---------------- 통계 렌더 ---------------- */
