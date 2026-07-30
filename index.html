@@ -41,6 +41,7 @@
   .view.active{display:block;}
   @keyframes fadeIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
 
+  /* ---------- 공통 카드 ---------- */
   .card{background:var(--surface); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); margin-bottom:14px;}
   .stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;}
   .stat-box{background:var(--surface); border-radius:16px; padding:16px; box-shadow:var(--shadow);}
@@ -49,6 +50,7 @@
 
   .section-title{font-size:15px; font-weight:700; margin:18px 4px 10px; color:var(--text);}
 
+  /* ---------- 홈 ---------- */
   .quick-add-btn{width:100%; padding:16px; border:none; border-radius:var(--radius); background:linear-gradient(135deg,var(--primary),var(--primary-dark)); color:#fff; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 6px 18px rgba(108,92,231,0.35);}
   .recent-item{display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border);}
   .recent-item:last-child{border-bottom:none;}
@@ -57,6 +59,7 @@
   .recent-item .txt .q{font-size:13.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .recent-item .txt .d{font-size:11.5px; color:var(--text-sub); margin-top:2px;}
 
+  /* ---------- 추가 ---------- */
   .upload-zone{border:2px dashed #D7D3F5; border-radius:var(--radius); background:var(--primary-soft); text-align:center; padding:28px 16px; cursor:pointer; position:relative; overflow:hidden;}
   .upload-zone img{max-width:100%; max-height:260px; border-radius:12px; display:block; margin:0 auto;}
   .upload-zone .hint{font-size:13px; color:var(--primary-dark); font-weight:600; margin-top:8px;}
@@ -81,9 +84,14 @@
   .reason-add-row input{flex:1;}
   .reason-add-row button{width:auto; padding:0 16px;}
 
+  .problem-card{background:var(--surface); border-radius:16px; padding:16px; margin-bottom:14px; box-shadow:var(--shadow); border:1.5px solid var(--border);}
+  .problem-card-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+  .problem-card-header .num-tag{font-size:12px; font-weight:800; color:var(--primary); background:var(--primary-soft); padding:4px 12px; border-radius:20px;}
+
   .spinner{width:16px; height:16px; border:2.5px solid rgba(255,255,255,.4); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; display:inline-block; vertical-align:-3px; margin-right:6px;}
   @keyframes spin{to{transform:rotate(360deg);}}
 
+  /* ---------- 목록 ---------- */
   .filter-bar{display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; margin-bottom:12px;}
   .filter-bar select{width:auto; flex-shrink:0; padding:9px 12px; font-size:12.5px; font-weight:600; background:var(--surface);}
   .entry-card{background:var(--surface); border-radius:16px; padding:16px; margin-bottom:12px; box-shadow:var(--shadow);}
@@ -104,9 +112,11 @@
   .empty{text-align:center; padding:60px 20px; color:var(--text-sub);}
   .empty .emoji{font-size:38px; margin-bottom:10px;}
 
+  /* ---------- 통계 ---------- */
   .chart-card{background:var(--surface); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); margin-bottom:14px;}
   .chart-card h3{font-size:13.5px; margin:0 0 12px; color:var(--text-sub); font-weight:700;}
 
+  /* ---------- 하단 탭바 ---------- */
   nav.tabbar{position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:520px; background:rgba(255,255,255,0.92); backdrop-filter:blur(14px); border-top:1px solid var(--border); display:flex; padding:8px 8px calc(8px + env(safe-area-inset-bottom)); z-index:30;}
   nav.tabbar button{flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:3px; padding:6px 0; color:var(--text-sub); cursor:pointer;}
   nav.tabbar button svg{width:22px; height:22px;}
@@ -131,6 +141,7 @@
 
   <main>
 
+    <!-- ================= 홈 ================= -->
     <section class="view active" id="view-home">
       <div class="stat-grid">
         <div class="stat-box"><div class="num" id="homeTotal">0</div><div class="label">누적 오답</div></div>
@@ -144,6 +155,7 @@
       <div class="card" id="recentList"><div class="empty"><div class="emoji">📝</div>아직 등록된 오답이 없어요</div></div>
     </section>
 
+    <!-- ================= 추가 ================= -->
     <section class="view" id="view-add">
       <div class="upload-zone" id="uploadZone">
         <img id="previewImg" style="display:none;" />
@@ -163,43 +175,36 @@
       <button class="btn btn-primary" id="analyzeBtn" style="margin-top:12px; display:none;" onclick="runAnalyze()">AI로 자동 인식하기</button>
 
       <div id="formArea" style="display:none;">
-        <label class="field-label">과목</label>
-        <select id="f_subject">
-          <option value="국어">국어</option>
-          <option value="수학">수학</option>
-          <option value="영어">영어</option>
-          <option value="사회">사회</option>
-          <option value="과학">과학</option>
-          <option value="기타">기타</option>
-        </select>
-
-        <label class="field-label">날짜</label>
+        <div class="btn-row">
+          <div style="flex:1;">
+            <label class="field-label">학년</label>
+            <select id="f_grade"></select>
+          </div>
+          <div style="flex:1;">
+            <label class="field-label">학기</label>
+            <select id="f_semester">
+              <option value="1학기">1학기</option>
+              <option value="2학기">2학기</option>
+            </select>
+          </div>
+        </div>
+        <label class="field-label">날짜 (전체 공통)</label>
         <input type="date" id="f_date" />
 
-        <label class="field-label">문제 내용</label>
-        <textarea id="f_question" placeholder="문제 내용을 입력하세요"></textarea>
+        <div id="problemCardsWrap"></div>
 
-        <label class="field-label">아이가 쓴 답</label>
-        <input type="text" id="f_studentAnswer" placeholder="학생이 작성한 답" />
-
-        <label class="field-label">정답</label>
-        <input type="text" id="f_correctAnswer" placeholder="정답" />
-
-        <label class="field-label">틀린 이유</label>
-        <select id="f_reason"></select>
-        <div class="reason-add-row" id="reasonAddRow" style="display:none;">
-          <input type="text" id="f_newReason" placeholder="새 이유 입력" />
-          <button class="btn btn-ghost" onclick="confirmNewReason()">추가</button>
-        </div>
-
-        <button class="btn btn-primary" style="margin-top:20px;" onclick="saveEntry()" id="saveBtn">오답노트에 저장</button>
+        <button class="btn btn-ghost" style="margin-top:10px;" onclick="addBlankProblemCard()">+ 문제 직접 추가</button>
+        <button class="btn btn-primary" style="margin-top:20px;" onclick="saveAllEntries()" id="saveBtn">오답노트에 전체 저장 (<span id="saveCount">0</span>개)</button>
       </div>
     </section>
 
+    <!-- ================= 목록 ================= -->
     <section class="view" id="view-list">
       <div class="filter-bar">
+        <select id="filterGrade"><option value="">전체 학년</option></select>
         <select id="filterSubject"><option value="">전체 과목</option></select>
         <select id="filterReason"><option value="">전체 이유</option></select>
+        <select id="filterDifficulty"><option value="">전체 난이도</option></select>
         <select id="filterRange">
           <option value="all">전체 기간</option>
           <option value="7">최근 7일</option>
@@ -209,6 +214,7 @@
       <div id="listArea"></div>
     </section>
 
+    <!-- ================= 통계 ================= -->
     <section class="view" id="view-stats">
       <div class="stat-grid">
         <div class="stat-box"><div class="num" id="statTotal">0</div><div class="label">전체 오답 수</div></div>
@@ -217,6 +223,27 @@
       <div class="chart-card"><h3>과목별 오답 수</h3><canvas id="chartSubject" height="180"></canvas></div>
       <div class="chart-card"><h3>틀린 이유별 분포</h3><canvas id="chartReason" height="180"></canvas></div>
       <div class="chart-card"><h3>주별 오답 추이</h3><canvas id="chartTrend" height="180"></canvas></div>
+    </section>
+
+    <!-- ================= 설정 ================= -->
+    <section class="view" id="view-settings">
+      <div class="card">
+        <label class="field-label">기본 학년 (새 문제 등록 시 기본으로 적용)</label>
+        <select id="s_defaultGrade"></select>
+        <label class="field-label">기본 학기</label>
+        <select id="s_defaultSemester">
+          <option value="1학기">1학기</option>
+          <option value="2학기">2학기</option>
+        </select>
+        <button class="btn btn-primary" style="margin-top:16px;" onclick="saveSettings()">설정 저장</button>
+      </div>
+      <div class="card">
+        <div class="section-title" style="margin:0 0 8px;">안내</div>
+        <div class="entry-ans">
+          매년 3월 1일이 지나면 앱을 열 때 "기본 학년을 올릴까요?"라고 한 번 물어봐요.<br/>
+          여기서 설정한 기본 학년/학기는 오답 추가 화면에서 문제마다 자유롭게 바꿔서 등록할 수 있어요 (선행학습/복습용).
+        </div>
+      </div>
     </section>
 
   </main>
@@ -238,12 +265,19 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M12 20V4M20 20v-7" stroke-linecap="round"/></svg>
       <span>통계</span>
     </button>
+    <button class="tab-btn" data-tab="settings" onclick="switchTab('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      <span>설정</span>
+    </button>
   </nav>
 
   <div class="toast" id="toast"></div>
 </div>
 
 <script type="module">
+/* =========================================================
+   ⚙️ 설정: 아래 두 값만 채워주세요
+   ========================================================= */
 const firebaseConfig = {
   apiKey: "AIzaSyCw2GCBQDpgsCQ6Lx-YjKn6BPRR8fwpZDQ",
   authDomain: "wrong-answer-note.firebaseapp.com",
@@ -254,16 +288,20 @@ const firebaseConfig = {
 };
 const GEMINI_API_KEY = "AQ.Ab8RN6Km1WjLUaMFv0yiBYrgo8buFbbgCpryUb2D_HJlbFymAg";
 const GEMINI_MODEL = "gemini-3.6-flash";
+/* ========================================================= */
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
-  getFirestore, collection, addDoc, getDocs, doc, updateDoc, deleteDoc, query, orderBy, serverTimestamp
+  getFirestore, collection, addDoc, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-const DEFAULT_REASONS = ["계산 실수", "문제를 잘못 읽음", "개념을 몰랐음", "시간 부족", "부주의/집중력 부족", "기타"];
+const DEFAULT_REASONS = ["계산실수", "개념이해 부족", "문제를 끝까지 읽지 않음", "단위 실수", "공식 암기 부족", "시간 부족", "부주의", "찍음", "응용력 부족", "집중력 부족", "기타"];
+const GRADES = ["초1","초2","초3","초4","초5","초6"];
+const SEMESTERS = ["1학기","2학기"];
+const DIFFICULTIES = ["하","중","상"];
 const SUBJECT_COLORS = {
   "국어": ["#FFE3EC","#E85D8C"], "수학": ["#E3EEFF","#4C7CF0"], "영어": ["#EEE3FF","#8B5CF6"],
   "사회": ["#FFF1E0","#F0924C"], "과학": ["#E1FBF0","#1FAE7A"], "기타": ["#F0F0F5","#8B90A0"]
@@ -272,14 +310,72 @@ const SUBJECT_COLORS = {
 let entries = [];
 let reasons = [];
 let currentImage = { base64: null, mimeType: null };
+let problemCards = [];
+let settings = { defaultGrade: '초4', defaultSemester: '1학기', lastGradeBumpYear: null };
+const MAX_PROBLEMS = 5;
 
+/* ---------------- 초기 로딩 ---------------- */
 async function init(){
+  fillGradeSelects();
+  await loadSettings();
   await loadReasons();
   await loadEntries();
   document.getElementById('f_date').valueAsDate = new Date();
+  document.getElementById('f_grade').value = settings.defaultGrade;
+  document.getElementById('f_semester').value = settings.defaultSemester;
+  checkMarchGradeBump();
   renderHome();
   renderList();
   renderStats();
+}
+
+function fillGradeSelects(){
+  const opts = GRADES.map(g => `<option value="${g}">${g}</option>`).join('');
+  document.getElementById('f_grade').innerHTML = opts;
+  document.getElementById('s_defaultGrade').innerHTML = opts;
+  document.getElementById('filterGrade').innerHTML = `<option value="">전체 학년</option>` + opts;
+  document.getElementById('filterDifficulty').innerHTML = `<option value="">전체 난이도</option>` + DIFFICULTIES.map(d => `<option value="${d}">${d}</option>`).join('');
+}
+
+async function loadSettings(){
+  try {
+    const snap = await getDoc(doc(db, "settings", "app"));
+    if (snap.exists()){
+      settings = { ...settings, ...snap.data() };
+    } else {
+      await setDoc(doc(db, "settings", "app"), settings);
+    }
+  } catch(e){ console.error(e); }
+  document.getElementById('s_defaultGrade').value = settings.defaultGrade;
+  document.getElementById('s_defaultSemester').value = settings.defaultSemester;
+}
+
+window.saveSettings = async function(){
+  settings.defaultGrade = document.getElementById('s_defaultGrade').value;
+  settings.defaultSemester = document.getElementById('s_defaultSemester').value;
+  try {
+    await setDoc(doc(db, "settings", "app"), settings, { merge: true });
+    showToast('설정을 저장했어요 ✓');
+  } catch(e){ console.error(e); showToast('설정 저장 실패: ' + e.message, 5000); }
+};
+
+function checkMarchGradeBump(){
+  const now = new Date();
+  const year = now.getFullYear();
+  const marchFirst = new Date(year, 2, 1); // 2 = 3월(0-indexed)
+  if (now < marchFirst) return;
+  if (settings.lastGradeBumpYear === year) return;
+
+  const idx = GRADES.indexOf(settings.defaultGrade);
+  const nextGrade = (idx >= 0 && idx < GRADES.length - 1) ? GRADES[idx + 1] : settings.defaultGrade;
+  const ok = window.confirm(`3월이 지났어요! 기본 학년을 ${settings.defaultGrade} → ${nextGrade}(으)로 올릴까요?`);
+  settings.lastGradeBumpYear = year;
+  if (ok && nextGrade !== settings.defaultGrade){
+    settings.defaultGrade = nextGrade;
+    document.getElementById('f_grade').value = nextGrade;
+  }
+  document.getElementById('s_defaultGrade').value = settings.defaultGrade;
+  setDoc(doc(db, "settings", "app"), settings, { merge: true }).catch(e => console.error(e));
 }
 
 async function loadReasons(){
@@ -289,6 +385,11 @@ async function loadReasons(){
     if (reasons.length === 0){
       for (const r of DEFAULT_REASONS) await addDoc(collection(db, "reasons"), { name: r });
       reasons = [...DEFAULT_REASONS];
+    } else {
+      // 기존 사용자: 새로 추가된 기본 오답사유 중 없는 것만 추가 (기존 커스텀 이유는 그대로 유지)
+      const missing = DEFAULT_REASONS.filter(r => !reasons.includes(r));
+      for (const r of missing) await addDoc(collection(db, "reasons"), { name: r });
+      reasons = reasons.concat(missing);
     }
   } catch(e){ reasons = [...DEFAULT_REASONS]; console.error(e); }
   fillReasonSelects();
@@ -300,42 +401,27 @@ async function loadEntries(){
     const snap = await getDocs(q);
     entries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   } catch(e){ console.error(e); entries = []; }
+  fillFilterOptions();
 }
 
 function fillReasonSelects(){
-  const sel = document.getElementById('f_reason');
-  sel.innerHTML = reasons.map(r => `<option value="${r}">${r}</option>`).join('') + `<option value="__new__">+ 새 이유 추가</option>`;
   const filterReason = document.getElementById('filterReason');
   filterReason.innerHTML = `<option value="">전체 이유</option>` + reasons.map(r => `<option value="${r}">${r}</option>`).join('');
 }
-document.getElementById('f_reason').addEventListener('change', e => {
-  document.getElementById('reasonAddRow').style.display = e.target.value === '__new__' ? 'flex' : 'none';
-});
 
-window.confirmNewReason = async function(){
-  const val = document.getElementById('f_newReason').value.trim();
-  if (!val) return;
-  if (!reasons.includes(val)){
-    await addDoc(collection(db, "reasons"), { name: val });
-    reasons.push(val);
-  }
-  fillReasonSelects();
-  document.getElementById('f_reason').value = val;
-  document.getElementById('reasonAddRow').style.display = 'none';
-  document.getElementById('f_newReason').value = '';
-};
-
+/* ---------------- 탭 전환 ---------------- */
 window.switchTab = function(tab){
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + tab).classList.add('active');
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  const titles = { home:["오답노트","오늘도 한 걸음 더 똑똑해지는 중"], add:["오답 추가","사진 한 장이면 충분해요"], list:["오답 목록","필터로 원하는 오답만 모아보기"], stats:["학습 통계","패턴을 알면 약점이 보여요"] };
+  const titles = { home:["오답노트","오늘도 한 걸음 더 똑똑해지는 중"], add:["오답 추가","사진 한 장이면 충분해요"], list:["오답 목록","필터로 원하는 오답만 모아보기"], stats:["학습 통계","패턴을 알면 약점이 보여요"], settings:["설정","기본 학년/학기를 관리하세요"] };
   document.getElementById('pageTitle').textContent = titles[tab][0];
   document.getElementById('pageSub').textContent = titles[tab][1];
   if (tab === 'stats') renderStats();
   if (tab === 'list') renderList();
 };
 
+/* ---------------- 이미지 업로드 & 압축 ---------------- */
 async function handleFileSelected(e){
   const file = e.target.files[0];
   if (!file) return;
@@ -373,14 +459,15 @@ function compressImage(file, maxDim, quality){
   });
 }
 
+/* ---------------- Gemini 분석 ---------------- */
 window.runAnalyze = async function(){
   const btn = document.getElementById('analyzeBtn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span>인식하는 중...';
   try {
-    const prompt = `이 이미지는 초등학생이 푼 시험지 또는 문제집의 오답 사진입니다.
-다음 정보를 JSON 형식으로만 응답하세요. 다른 설명이나 코드블록 없이 순수 JSON 객체만 반환하세요.
-{"subject":"국어/수학/영어/사회/과학 중 추정되는 과목(모르면 빈 문자열)","questionText":"문제 내용을 간략히 정리","studentAnswer":"학생이 작성한 답(보이면 적고 안 보이면 빈 문자열)","correctAnswer":"정답(보이거나 유추 가능하면 적고 아니면 빈 문자열)"}`;
+    const prompt = `이 이미지에는 초등학생이 푼 시험지 또는 문제집의 오답이 1개 이상 포함되어 있을 수 있습니다.
+이미지에서 찾을 수 있는 "틀린" 문제만 최대 ${MAX_PROBLEMS}개까지 찾아 각각 아래 형식으로 정리해서, 순수 JSON 객체 하나로만 응답하세요. 다른 설명이나 코드블록 없이 JSON만 반환하세요. 맞은 문제는 포함하지 마세요. 오답이 1개뿐이면 배열에 1개만 넣으세요.
+{"problems":[{"subject":"국어/수학/영어/사회/과학 중 추정되는 과목(모르면 빈 문자열)","unit":"이 문제가 속한 단원 추정(예: 분수, 소수, 도형, 독해, 어휘, 문법 등. 모르면 빈 문자열)","difficulty":"하/중/상 중 추정 난이도","questionText":"문제 내용을 간략히 정리","studentAnswer":"학생이 작성한 답(보이면 적고 안 보이면 빈 문자열)","correctAnswer":"정답(보이거나 유추 가능하면 적고 아니면 빈 문자열)"}]}`;
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -399,14 +486,24 @@ window.runAnalyze = async function(){
     let text = cand.content.parts[0].text || '';
     text = text.replace(/```json/g,'').replace(/```/g,'').trim();
     const parsed = JSON.parse(text);
-    document.getElementById('f_subject').value = ['국어','수학','영어','사회','과학'].includes(parsed.subject) ? parsed.subject : '기타';
-    document.getElementById('f_question').value = parsed.questionText || '';
-    document.getElementById('f_studentAnswer').value = parsed.studentAnswer || '';
-    document.getElementById('f_correctAnswer').value = parsed.correctAnswer || '';
+    const list = Array.isArray(parsed.problems) ? parsed.problems.slice(0, MAX_PROBLEMS) : [];
+    if (list.length === 0) throw new Error('오답을 찾지 못했어요. 아래 "문제 직접 추가"로 입력해주세요.');
+
+    problemCards = list.map(p => ({
+      subject: ['국어','수학','영어','사회','과학'].includes(p.subject) ? p.subject : '기타',
+      unit: p.unit || '',
+      difficulty: DIFFICULTIES.includes(p.difficulty) ? p.difficulty : '중',
+      questionText: p.questionText || '',
+      studentAnswer: p.studentAnswer || '',
+      correctAnswer: p.correctAnswer || '',
+      reason: reasons[0] || ''
+    }));
+    renderProblemCards();
     document.getElementById('formArea').style.display = 'block';
-    showToast('인식 완료! 내용을 확인하고 수정해주세요');
+    showToast(`문제 ${problemCards.length}개 인식 완료! 내용을 확인하고 수정해주세요`);
   } catch(e){
     console.error(e);
+    if (problemCards.length === 0) addBlankProblemCard();
     document.getElementById('formArea').style.display = 'block';
     showToast('인식 실패: ' + e.message, 6000);
   } finally {
@@ -415,47 +512,140 @@ window.runAnalyze = async function(){
   }
 };
 
-window.saveEntry = async function(){
-  const reasonVal = document.getElementById('f_reason').value;
-  if (reasonVal === '__new__'){ showToast('새 이유를 추가 버튼으로 먼저 등록해주세요'); return; }
-  const entry = {
-    date: document.getElementById('f_date').value,
-    subject: document.getElementById('f_subject').value,
-    questionText: document.getElementById('f_question').value,
-    studentAnswer: document.getElementById('f_studentAnswer').value,
-    correctAnswer: document.getElementById('f_correctAnswer').value,
-    reason: reasonVal,
-    retried: false,
-    retriedCorrect: null,
-    createdAt: serverTimestamp()
-  };
+/* ---------------- 문제 카드 렌더링 ---------------- */
+function renderProblemCards(){
+  const wrap = document.getElementById('problemCardsWrap');
+  wrap.innerHTML = problemCards.map((p, i) => {
+    const subjectOptions = ['국어','수학','영어','사회','과학','기타'].map(s =>
+      `<option value="${s}" ${p.subject===s?'selected':''}>${s}</option>`).join('');
+    const difficultyOptions = DIFFICULTIES.map(d =>
+      `<option value="${d}" ${p.difficulty===d?'selected':''}>${d}</option>`).join('');
+    const reasonOptions = reasons.map(r =>
+      `<option value="${r}" ${p.reason===r?'selected':''}>${r}</option>`).join('') + `<option value="__new__">+ 새 이유 추가</option>`;
+    return `
+    <div class="problem-card" data-idx="${i}">
+      <div class="problem-card-header">
+        <span class="num-tag">문제 ${i+1}</span>
+        <button class="icon-btn" onclick="removeProblemCard(${i})">🗑 삭제</button>
+      </div>
+      <label class="field-label">과목</label>
+      <select onchange="updateCardField(${i},'subject',this.value)">${subjectOptions}</select>
+
+      <div class="btn-row">
+        <div style="flex:1;">
+          <label class="field-label">단원</label>
+          <input type="text" value="${escapeAttr(p.unit)}" oninput="updateCardField(${i},'unit',this.value)" placeholder="예: 분수, 독해" />
+        </div>
+        <div style="flex:1;">
+          <label class="field-label">난이도</label>
+          <select onchange="updateCardField(${i},'difficulty',this.value)">${difficultyOptions}</select>
+        </div>
+      </div>
+
+      <label class="field-label">문제 내용</label>
+      <textarea oninput="updateCardField(${i},'questionText',this.value)" placeholder="문제 내용을 입력하세요">${escapeHtml(p.questionText)}</textarea>
+
+      <label class="field-label">아이가 쓴 답</label>
+      <input type="text" value="${escapeAttr(p.studentAnswer)}" oninput="updateCardField(${i},'studentAnswer',this.value)" placeholder="학생이 작성한 답" />
+
+      <label class="field-label">정답</label>
+      <input type="text" value="${escapeAttr(p.correctAnswer)}" oninput="updateCardField(${i},'correctAnswer',this.value)" placeholder="정답" />
+
+      <label class="field-label">틀린 이유</label>
+      <select onchange="onReasonChange(${i}, this.value)">${reasonOptions}</select>
+      <div class="reason-add-row" id="reasonAddRow-${i}" style="display:none;">
+        <input type="text" id="newReasonInput-${i}" placeholder="새 이유 입력" />
+        <button class="btn btn-ghost" onclick="confirmNewReasonForCard(${i})">추가</button>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('saveCount').textContent = problemCards.length;
+}
+
+window.updateCardField = function(idx, field, value){
+  if (problemCards[idx]) problemCards[idx][field] = value;
+};
+
+window.onReasonChange = function(idx, value){
+  if (value === '__new__'){
+    document.getElementById('reasonAddRow-' + idx).style.display = 'flex';
+  } else {
+    problemCards[idx].reason = value;
+  }
+};
+
+window.confirmNewReasonForCard = async function(idx){
+  const input = document.getElementById('newReasonInput-' + idx);
+  const val = input.value.trim();
+  if (!val) return;
+  if (!reasons.includes(val)){
+    await addDoc(collection(db, "reasons"), { name: val });
+    reasons.push(val);
+    fillReasonSelects();
+  }
+  problemCards[idx].reason = val;
+  renderProblemCards();
+};
+
+window.addBlankProblemCard = function(){
+  problemCards.push({ subject:'기타', unit:'', difficulty:'중', questionText:'', studentAnswer:'', correctAnswer:'', reason: reasons[0] || '' });
+  renderProblemCards();
+};
+
+window.removeProblemCard = function(idx){
+  problemCards.splice(idx, 1);
+  renderProblemCards();
+};
+
+/* ---------------- 저장 ---------------- */
+window.saveAllEntries = async function(){
+  if (problemCards.length === 0){ showToast('저장할 문제가 없어요'); return; }
+  const date = document.getElementById('f_date').value;
+  const grade = document.getElementById('f_grade').value;
+  const semester = document.getElementById('f_semester').value;
   const btn = document.getElementById('saveBtn');
   btn.disabled = true; btn.textContent = '저장 중...';
   try {
-    await addDoc(collection(db, "entries"), entry);
-    showToast('오답노트에 저장했어요 ✓');
+    await Promise.all(problemCards.map(p => addDoc(collection(db, "entries"), {
+      date,
+      grade,
+      semester,
+      subject: p.subject,
+      unit: p.unit || '',
+      difficulty: p.difficulty || '중',
+      questionText: p.questionText,
+      studentAnswer: p.studentAnswer,
+      correctAnswer: p.correctAnswer,
+      reason: p.reason || reasons[0] || '기타',
+      retried: false,
+      retriedCorrect: null,
+      createdAt: serverTimestamp()
+    })));
+    showToast(`오답 ${problemCards.length}개 저장했어요 ✓`);
     resetAddForm();
     await loadEntries();
     renderHome(); renderList(); renderStats();
     switchTab('list');
-  } catch(e){ console.error(e); showToast('저장에 실패했어요'); }
-  finally { btn.disabled = false; btn.textContent = '오답노트에 저장'; }
+  } catch(e){ console.error(e); showToast('저장에 실패했어요: ' + e.message, 5000); }
+  finally { btn.disabled = false; btn.textContent = '오답노트에 전체 저장 (' + document.getElementById('saveCount').textContent + '개)'; }
 };
 
 function resetAddForm(){
   currentImage = { base64: null, mimeType: null };
+  problemCards = [];
   document.getElementById('cameraInput').value = '';
   document.getElementById('galleryInput').value = '';
   document.getElementById('previewImg').style.display = 'none';
   document.getElementById('uploadHintWrap').style.display = 'block';
   document.getElementById('analyzeBtn').style.display = 'none';
   document.getElementById('formArea').style.display = 'none';
-  document.getElementById('f_question').value = '';
-  document.getElementById('f_studentAnswer').value = '';
-  document.getElementById('f_correctAnswer').value = '';
+  document.getElementById('problemCardsWrap').innerHTML = '';
   document.getElementById('f_date').valueAsDate = new Date();
+  document.getElementById('f_grade').value = settings.defaultGrade;
+  document.getElementById('f_semester').value = settings.defaultSemester;
 }
 
+/* ---------------- 홈 렌더 ---------------- */
 function renderHome(){
   document.getElementById('homeTotal').textContent = entries.length;
   const weekAgo = Date.now() - 7*24*60*60*1000;
@@ -477,21 +667,26 @@ function renderHome(){
   }).join('');
 }
 
+/* ---------------- 목록 렌더 ---------------- */
 function fillFilterOptions(){
   const subjSel = document.getElementById('filterSubject');
+  const current = subjSel.value;
   const subjects = [...new Set(entries.map(e => e.subject).filter(Boolean))];
-  subjSel.innerHTML = `<option value="">전체 과목</option>` + subjects.map(s => `<option value="${s}">${s}</option>`).join('');
+  subjSel.innerHTML = `<option value="">전체 과목</option>` + subjects.map(s => `<option value="${s}" ${s===current?'selected':''}>${s}</option>`).join('');
 }
-['filterSubject','filterReason','filterRange'].forEach(id => document.getElementById(id).addEventListener('change', renderList));
+['filterGrade','filterSubject','filterReason','filterDifficulty','filterRange'].forEach(id => document.getElementById(id).addEventListener('change', renderList));
 
 function renderList(){
-  fillFilterOptions();
+  const grade = document.getElementById('filterGrade').value;
   const subj = document.getElementById('filterSubject').value;
   const reason = document.getElementById('filterReason').value;
+  const difficulty = document.getElementById('filterDifficulty').value;
   const range = document.getElementById('filterRange').value;
   let filtered = entries.filter(e => {
+    if (grade && e.grade !== grade) return false;
     if (subj && e.subject !== subj) return false;
     if (reason && e.reason !== reason) return false;
+    if (difficulty && e.difficulty !== difficulty) return false;
     if (range !== 'all'){
       const days = parseInt(range);
       const cutoff = Date.now() - days*24*60*60*1000;
@@ -509,11 +704,18 @@ function renderList(){
   wrap.innerHTML = filtered.map(e => {
     const c = SUBJECT_COLORS[e.subject] || SUBJECT_COLORS['기타'];
     const retriedChecked = e.retried ? 'checked' : '';
+    const gradeTag = e.grade ? `<span class="tag" style="background:#F0F0F5;color:#8B90A0">${e.grade}${e.semester ? ' · '+e.semester : ''}</span>` : '';
+    const unitTag = e.unit ? `<span class="tag" style="background:#F0F0F5;color:#8B90A0">📘 ${e.unit}</span>` : '';
+    const diffColors = { '하':['#E4F9F3','#00B894'], '중':['#FFF6E0','#E0A200'], '상':['#FFECEC','#E02020'] };
+    const diffTag = e.difficulty ? `<span class="tag" style="background:${(diffColors[e.difficulty]||['#F0F0F5','#8B90A0'])[0]};color:${(diffColors[e.difficulty]||['#F0F0F5','#8B90A0'])[1]}">난이도 ${e.difficulty}</span>` : '';
     return `
     <div class="entry-card">
       <div class="entry-top">
         <div class="entry-meta">
           <span class="tag" style="background:${c[0]};color:${c[1]}">${e.subject||'기타'}</span>
+          ${gradeTag}
+          ${unitTag}
+          ${diffTag}
           <span class="tag" style="background:#F0F0F5;color:#8B90A0">${e.date||''}</span>
           <span class="tag" style="background:#F0F0F5;color:#8B90A0">${e.reason||''}</span>
         </div>
@@ -554,6 +756,7 @@ window.setRetryResult = async function(id, correct){
   renderList(); renderStats();
 };
 
+/* ---------------- 통계 렌더 ---------------- */
 let chartSubject, chartReason, chartTrend;
 function renderStats(){
   document.getElementById('statTotal').textContent = entries.length;
@@ -600,7 +803,9 @@ function renderStats(){
   });
 }
 
+/* ---------------- 유틸 ---------------- */
 function escapeHtml(str){ const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+function escapeAttr(str){ return escapeHtml(str).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 let toastTimer;
 function showToast(msg, duration){
   const t = document.getElementById('toast');
