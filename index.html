@@ -113,7 +113,7 @@
   nav.tabbar button span{font-size:10.5px; font-weight:600;}
   nav.tabbar button.active{color:var(--primary);}
 
-  .toast{position:fixed; bottom:90px; left:50%; transform:translateX(-50%); background:#2D3436; color:#fff; padding:11px 18px; border-radius:30px; font-size:13px; font-weight:600; z-index:50; opacity:0; pointer-events:none; transition:opacity .25s, transform .25s;}
+  .toast{position:fixed; bottom:90px; left:50%; transform:translateX(-50%); background:#2D3436; color:#fff; padding:11px 18px; border-radius:20px; font-size:13px; font-weight:600; z-index:50; opacity:0; pointer-events:none; transition:opacity .25s, transform .25s; max-width:88%; text-align:center; white-space:normal; line-height:1.5;}
   .toast.show{opacity:1; transform:translateX(-50%) translateY(-6px);}
 
   ::-webkit-scrollbar{display:none;}
@@ -145,15 +145,20 @@
     </section>
 
     <section class="view" id="view-add">
-      <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+      <div class="upload-zone" id="uploadZone">
         <img id="previewImg" style="display:none;" />
         <div id="uploadHintWrap">
           <div style="font-size:32px;">📷</div>
           <div class="hint">문제 사진을 올려주세요</div>
-          <div class="hint-sub">탭해서 촬영하거나 갤러리에서 선택</div>
+          <div class="hint-sub">아래 버튼 중 하나를 선택하세요</div>
         </div>
       </div>
-      <input type="file" id="fileInput" accept="image/*" />
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn btn-ghost" onclick="document.getElementById('cameraInput').click()">📷 사진 촬영</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('galleryInput').click()">🖼 갤러리에서 선택</button>
+      </div>
+      <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none;" />
+      <input type="file" id="galleryInput" accept="image/*" style="display:none;" />
 
       <button class="btn btn-primary" id="analyzeBtn" style="margin-top:12px; display:none;" onclick="runAnalyze()">AI로 자동 인식하기</button>
 
@@ -331,7 +336,7 @@ window.switchTab = function(tab){
   if (tab === 'list') renderList();
 };
 
-document.getElementById('fileInput').addEventListener('change', async e => {
+async function handleFileSelected(e){
   const file = e.target.files[0];
   if (!file) return;
   const compressed = await compressImage(file, 1024, 0.75);
@@ -341,7 +346,9 @@ document.getElementById('fileInput').addEventListener('change', async e => {
   document.getElementById('uploadHintWrap').style.display = 'none';
   document.getElementById('analyzeBtn').style.display = 'block';
   document.getElementById('formArea').style.display = 'none';
-});
+}
+document.getElementById('cameraInput').addEventListener('change', handleFileSelected);
+document.getElementById('galleryInput').addEventListener('change', handleFileSelected);
 
 function compressImage(file, maxDim, quality){
   return new Promise((resolve, reject) => {
@@ -380,8 +387,16 @@ window.runAnalyze = async function(){
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: currentImage.mimeType, data: currentImage.base64 } }] }] })
     });
     const json = await res.json();
-    if (json.error) throw new Error(json.error.message);
-    let text = json.candidates[0].content.parts[0].text || '';
+    if (json.error) throw new Error('API 오류: ' + json.error.message);
+    if (!json.candidates || !json.candidates[0]) {
+      const reason = (json.promptFeedback && json.promptFeedback.blockReason) || '알 수 없음';
+      throw new Error('응답 없음 (사유: ' + reason + ')');
+    }
+    const cand = json.candidates[0];
+    if (cand.finishReason && cand.finishReason !== 'STOP') {
+      throw new Error('인식 중단됨 (사유: ' + cand.finishReason + ')');
+    }
+    let text = cand.content.parts[0].text || '';
     text = text.replace(/```json/g,'').replace(/```/g,'').trim();
     const parsed = JSON.parse(text);
     document.getElementById('f_subject').value = ['국어','수학','영어','사회','과학'].includes(parsed.subject) ? parsed.subject : '기타';
@@ -393,7 +408,7 @@ window.runAnalyze = async function(){
   } catch(e){
     console.error(e);
     document.getElementById('formArea').style.display = 'block';
-    showToast('자동 인식에 실패했어요. 직접 입력해주세요');
+    showToast('인식 실패: ' + e.message, 6000);
   } finally {
     btn.disabled = false;
     btn.textContent = 'AI로 자동 인식하기';
@@ -429,7 +444,8 @@ window.saveEntry = async function(){
 
 function resetAddForm(){
   currentImage = { base64: null, mimeType: null };
-  document.getElementById('fileInput').value = '';
+  document.getElementById('cameraInput').value = '';
+  document.getElementById('galleryInput').value = '';
   document.getElementById('previewImg').style.display = 'none';
   document.getElementById('uploadHintWrap').style.display = 'block';
   document.getElementById('analyzeBtn').style.display = 'none';
@@ -586,11 +602,11 @@ function renderStats(){
 
 function escapeHtml(str){ const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
 let toastTimer;
-function showToast(msg){
+function showToast(msg, duration){
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(()=>t.classList.remove('show'), 2200);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), duration || 2200);
 }
 
 if ('serviceWorker' in navigator){
