@@ -49,6 +49,10 @@
   .stat-box .label{font-size:12px; color:var(--text-sub); margin-top:4px;}
 
   .section-title{font-size:15px; font-weight:700; margin:18px 4px 10px; color:var(--text);}
+  .collapsible-header{display:flex; align-items:center; justify-content:space-between; cursor:pointer; user-select:none;}
+  .collapsible-header .chevron{font-size:12px; color:var(--text-sub); transition:transform .2s;}
+  .collapsible-section.collapsed .chevron{transform:rotate(-90deg);}
+  .collapsible-section.collapsed .collapsible-body{display:none;}
 
   /* ---------- 홈 ---------- */
   .quick-add-btn{width:100%; padding:16px; border:none; border-radius:var(--radius); background:linear-gradient(135deg,var(--primary),var(--primary-dark)); color:#fff; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center; gap:8px; box-shadow:0 6px 18px rgba(108,92,231,0.35);}
@@ -141,6 +145,13 @@
   .empty{text-align:center; padding:60px 20px; color:var(--text-sub);}
   .empty .emoji{font-size:38px; margin-bottom:10px;}
 
+  #listArea.compact-mode .entry-card{ padding:10px 14px; }
+  #listArea.compact-mode .entry-card .entry-q{ margin:4px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #listArea.compact-mode .entry-card:not(.expanded) .entry-ans,
+  #listArea.compact-mode .entry-card:not(.expanded) .entry-actions,
+  #listArea.compact-mode .entry-card:not(.expanded) .retry-toggle,
+  #listArea.compact-mode .entry-card:not(.expanded) .ai-inline-box{ display:none; }
+
   /* ---------- 통계 ---------- */
   .chart-card{background:var(--surface); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); margin-bottom:14px;}
   .chart-card h3{font-size:13.5px; margin:0 0 12px; color:var(--text-sub); font-weight:700;}
@@ -166,9 +177,39 @@
     #examPrintArea h2{ font-size:18px; margin-top:20px; }
     .exam-print-page-break{ page-break-before:always; }
   }
+
+  /* ---------- 다크 모드 ---------- */
+  :root.dark{
+    --bg:#16161C; --surface:#1F1F27; --primary:#8C7AFF; --primary-dark:#6C5CE7; --primary-soft:#2A2740;
+    --success:#2ECC9B; --success-soft:#123B32; --danger:#FF7B7B; --danger-soft:#3A1F1F;
+    --text:#EDEDF2; --text-sub:#9A9AAE; --border:#2C2C36;
+  }
+  :root.dark nav.tabbar{ background:rgba(31,31,39,0.92); }
+  :root.dark .upload-zone{ background:var(--primary-soft); border-color:#3A3560; }
+  :root.dark input, :root.dark select, :root.dark textarea{ background:#26262F; color:var(--text); border-color:var(--border); }
+  :root.dark .btn-ghost{ background:var(--surface); }
+
+  /* ---------- PC/태블릿 넓은 화면 ---------- */
+  @media (min-width: 900px){
+    body{ display:flex; justify-content:center; }
+    #app{ max-width:1100px; padding-left:210px; }
+    nav.tabbar{ position:fixed; left:0; top:0; bottom:auto; transform:none; width:200px; max-width:200px; height:100vh;
+      flex-direction:column; align-items:stretch; justify-content:flex-start; gap:4px; padding:24px 12px; border-top:none; border-right:1px solid var(--border); }
+    nav.tabbar button{ flex-direction:row; justify-content:flex-start; gap:10px; padding:11px 14px; border-radius:10px; }
+    nav.tabbar button span{ font-size:13.5px; }
+    nav.tabbar button svg{ width:20px; height:20px; }
+    nav.tabbar button.active{ background:var(--primary-soft); }
+    main{ padding:8px 28px 40px; }
+    header.topbar{ padding:24px 4px 12px; }
+    #listArea.compact-mode, #listArea:not(.compact-mode){ display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:14px; align-items:start; }
+    #problemCardsWrap{ display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:14px; }
+  }
 </style>
 </head>
 <body>
+<script>
+  try { if (localStorage.getItem('oedapnote_theme') === 'dark') document.documentElement.classList.add('dark'); } catch(e){}
+</script>
 <div id="app">
 
   <header class="topbar">
@@ -199,18 +240,25 @@
         오답 사진 추가하기
       </button>
 
-      <div class="section-title">🎯 이번 달 목표</div>
-      <div class="card" id="homeGoalCard"></div>
+      <div class="collapsible-section" data-section="goal">
+        <div class="section-title collapsible-header" onclick="toggleHomeSection('goal')">🎯 이번 달 목표 <span class="chevron">▾</span></div>
+        <div class="card collapsible-body" id="homeGoalCard"></div>
+      </div>
 
-      <div class="section-title">🏅 나의 배지</div>
-      <div class="card"><div class="badge-grid" id="homeBadges"></div></div>
+      <div class="collapsible-section" data-section="badges">
+        <div class="section-title collapsible-header" onclick="toggleHomeSection('badges')">🏅 나의 배지 <span class="chevron">▾</span></div>
+        <div class="card collapsible-body"><div class="badge-grid" id="homeBadges"></div></div>
+      </div>
 
-      <div class="section-title">과목별 현황</div>
-      <div class="card" id="homeSubjectMini"></div>
+      <div class="collapsible-section" data-section="subject">
+        <div class="section-title collapsible-header" onclick="toggleHomeSection('subject')">과목별 현황 <span class="chevron">▾</span></div>
+        <div class="card collapsible-body" id="homeSubjectMini"></div>
+      </div>
 
-      <div class="section-title">가장 약한 단원 TOP 3</div>
-      <div class="card" id="homeUnitMini"></div>
-
+      <div class="collapsible-section" data-section="unit">
+        <div class="section-title collapsible-header" onclick="toggleHomeSection('unit')">가장 약한 단원 TOP 3 <span class="chevron">▾</span></div>
+        <div class="card collapsible-body" id="homeUnitMini"></div>
+      </div>
       <div class="section-title">최근 추가한 오답</div>
       <div class="card" id="recentList"><div class="empty"><div class="emoji">📝</div>아직 등록된 오답이 없어요</div></div>
     </section>
@@ -260,6 +308,7 @@
 
     <!-- ================= 목록 ================= -->
     <section class="view" id="view-list">
+      <input type="text" id="searchQuery" placeholder="🔍 문제 내용 검색" style="margin-bottom:10px;" />
       <div class="filter-bar">
         <select id="filterGrade"><option value="">전체 학년</option></select>
         <select id="filterSubject"><option value="">전체 과목</option></select>
@@ -270,11 +319,18 @@
           <option value="7">최근 7일</option>
           <option value="30">최근 30일</option>
         </select>
+        <select id="sortOrder">
+          <option value="newest">최신순</option>
+          <option value="oldest">오래된순</option>
+          <option value="difficulty">난이도순</option>
+          <option value="grade">학년순</option>
+        </select>
       </div>
       <div class="toggle-chip-row">
         <label class="toggle-chip"><input type="checkbox" id="filterDueOnly" /> 📅 복습 예정만</label>
         <label class="toggle-chip"><input type="checkbox" id="filterStarredOnly" /> ⭐ 즐겨찾기만</label>
         <label class="toggle-chip"><input type="checkbox" id="filterShowGraduated" /> 🎓 졸업 포함</label>
+        <label class="toggle-chip"><input type="checkbox" id="compactView" /> 📋 간단히 보기</label>
       </div>
       <div id="listArea"></div>
     </section>
@@ -387,6 +443,14 @@
         <button class="btn btn-primary" style="margin-top:12px;" onclick="saveSettings()">목표 저장</button>
       </div>
       <div class="card">
+        <label class="toggle-chip"><input type="checkbox" id="s_darkMode" onchange="toggleDarkMode(this.checked)" /> 🌙 다크 모드</label>
+      </div>
+      <div class="card">
+        <label class="field-label">📥 데이터 내보내기</label>
+        <div class="entry-ans" style="margin-bottom:10px;">전체 오답 데이터를 엑셀에서 열 수 있는 CSV 파일로 내려받아요.</div>
+        <button class="btn btn-ghost" onclick="exportCSV()">CSV로 내보내기</button>
+      </div>
+      <div class="card">
         <div class="section-title" style="margin:0 0 8px;">안내</div>
         <div class="entry-ans">
           매년 3월 1일이 지나면 앱을 열 때 "기본 학년을 올릴까요?"라고 한 번 물어봐요.<br/>
@@ -478,10 +542,12 @@ async function init(){
   await loadMonthlyStats();
   await loadReasons();
   await loadEntries();
+  restoreFilterState();
   document.getElementById('f_date').valueAsDate = new Date();
   document.getElementById('f_grade').value = settings.defaultGrade;
   document.getElementById('f_semester').value = settings.defaultSemester;
   checkMarchGradeBump();
+  applyCollapsedSections();
   renderHome();
   renderList();
   renderStats();
@@ -521,6 +587,35 @@ async function loadSettings(){
   document.getElementById('s_defaultGrade').value = settings.defaultGrade;
   document.getElementById('s_defaultSemester').value = settings.defaultSemester;
   document.getElementById('s_monthlyGoal').value = settings.monthlyGoal;
+  document.getElementById('s_darkMode').checked = document.documentElement.classList.contains('dark');
+}
+
+window.toggleDarkMode = function(checked){
+  document.documentElement.classList.toggle('dark', checked);
+  try { localStorage.setItem('oedapnote_theme', checked ? 'dark' : 'light'); } catch(e){}
+};
+
+window.exportCSV = function(){
+  if (entries.length === 0){ showToast('내보낼 데이터가 없어요'); return; }
+  const headers = ['날짜','학년','학기','과목','단원','난이도','문제','학생답','정답','오답사유','즐겨찾기','졸업여부','연속정답','다음복습일'];
+  const rows = entries.map(e => [
+    e.date||'', e.grade||'', e.semester||'', e.subject||'', e.unit||'', e.difficulty||'',
+    e.questionText||'', e.studentAnswer||'', e.correctAnswer||'',
+    e.reason||'', e.starred ? 'Y' : 'N', e.graduated ? 'Y' : 'N', e.consecutiveCorrect||0, e.nextReviewDate||''
+  ]);
+  const csv = [headers, ...rows]
+    .map(row => row.map(v => `"${String(v).replace(/"/g,'""')}"`).join(','))
+    .join('\r\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `오답노트_${todayStr()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('CSV 파일을 내려받았어요 ✓');
 }
 
 window.saveSettings = async function(){
@@ -1184,6 +1279,29 @@ function resetAddForm(){
 }
 
 /* ---------------- 홈 렌더 ---------------- */
+window.toggleHomeSection = function(name){
+  const el = document.querySelector(`.collapsible-section[data-section="${name}"]`);
+  if (!el) return;
+  el.classList.toggle('collapsed');
+  try {
+    const collapsed = JSON.parse(localStorage.getItem('oedapnote_collapsed') || '[]');
+    const idx = collapsed.indexOf(name);
+    if (el.classList.contains('collapsed')){ if (idx === -1) collapsed.push(name); }
+    else { if (idx !== -1) collapsed.splice(idx, 1); }
+    localStorage.setItem('oedapnote_collapsed', JSON.stringify(collapsed));
+  } catch(e){ /* 무시 */ }
+};
+
+function applyCollapsedSections(){
+  try {
+    const collapsed = JSON.parse(localStorage.getItem('oedapnote_collapsed') || '[]');
+    collapsed.forEach(name => {
+      const el = document.querySelector(`.collapsible-section[data-section="${name}"]`);
+      if (el) el.classList.add('collapsed');
+    });
+  } catch(e){ /* 무시 */ }
+}
+
 function renderGoalCard(){
   const wrap = document.getElementById('homeGoalCard');
   const goal = settings.monthlyGoal || 100;
@@ -1323,8 +1441,46 @@ function fillFilterOptions(){
   const subjects = [...new Set(entries.map(e => e.subject).filter(Boolean))];
   subjSel.innerHTML = `<option value="">전체 과목</option>` + subjects.map(s => `<option value="${s}" ${s===current?'selected':''}>${s}</option>`).join('');
 }
-['filterGrade','filterSubject','filterReason','filterDifficulty','filterRange'].forEach(id => document.getElementById(id).addEventListener('change', renderList));
-['filterStarredOnly','filterShowGraduated','filterDueOnly'].forEach(id => document.getElementById(id).addEventListener('change', renderList));
+const FILTER_IDS = ['filterGrade','filterSubject','filterReason','filterDifficulty','filterRange','sortOrder','filterStarredOnly','filterShowGraduated','filterDueOnly','compactView'];
+FILTER_IDS.forEach(id => {
+  const el = document.getElementById(id);
+  const evt = (el.type === 'checkbox') ? 'change' : (el.tagName === 'SELECT' ? 'change' : 'input');
+  el.addEventListener(evt, () => { saveFilterState(); renderList(); });
+});
+document.getElementById('searchQuery').addEventListener('input', () => { saveFilterState(); renderList(); });
+
+function saveFilterState(){
+  try {
+    const state = {};
+    FILTER_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      state[id] = (el.type === 'checkbox') ? el.checked : el.value;
+    });
+    state.searchQuery = document.getElementById('searchQuery').value;
+    localStorage.setItem('oedapnote_filters', JSON.stringify(state));
+  } catch(e){ /* localStorage 사용 불가 시 무시 */ }
+}
+
+function restoreFilterState(){
+  try {
+    const raw = localStorage.getItem('oedapnote_filters');
+    if (!raw) return;
+    const state = JSON.parse(raw);
+    FILTER_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (!(id in state)) return;
+      if (el.type === 'checkbox') el.checked = state[id];
+      else el.value = state[id];
+    });
+    if ('searchQuery' in state) document.getElementById('searchQuery').value = state.searchQuery;
+  } catch(e){ /* 무시 */ }
+}
+
+let expandedCardIds = new Set();
+window.toggleCardExpand = function(id){
+  if (expandedCardIds.has(id)) expandedCardIds.delete(id); else expandedCardIds.add(id);
+  renderList();
+};
 
 function renderList(){
   const grade = document.getElementById('filterGrade').value;
@@ -1335,6 +1491,9 @@ function renderList(){
   const starredOnly = document.getElementById('filterStarredOnly').checked;
   const showGraduated = document.getElementById('filterShowGraduated').checked;
   const dueOnly = document.getElementById('filterDueOnly').checked;
+  const compact = document.getElementById('compactView').checked;
+  const sortMode = document.getElementById('sortOrder').value;
+  const searchQ = document.getElementById('searchQuery').value.trim().toLowerCase();
   const today = todayStr();
   let filtered = entries.filter(e => {
     if (grade && e.grade !== grade) return false;
@@ -1344,6 +1503,7 @@ function renderList(){
     if (starredOnly && !e.starred) return false;
     if (!showGraduated && e.graduated) return false;
     if (dueOnly && (e.graduated || (e.nextReviewDate && e.nextReviewDate > today))) return false;
+    if (searchQ && !(e.questionText||'').toLowerCase().includes(searchQ)) return false;
     if (range !== 'all'){
       const days = parseInt(range);
       const cutoff = Date.now() - days*24*60*60*1000;
@@ -1353,7 +1513,17 @@ function renderList(){
     return true;
   });
 
+  if (sortMode === 'oldest'){
+    filtered = [...filtered].reverse();
+  } else if (sortMode === 'difficulty'){
+    filtered = [...filtered].sort((a,b) => DIFFICULTIES.indexOf(b.difficulty||'중') - DIFFICULTIES.indexOf(a.difficulty||'중'));
+  } else if (sortMode === 'grade'){
+    filtered = [...filtered].sort((a,b) => GRADES.indexOf(a.grade||'') - GRADES.indexOf(b.grade||''));
+  }
+  // 'newest'는 entries가 이미 최신순이라 그대로 둠
+
   const wrap = document.getElementById('listArea');
+  wrap.classList.toggle('compact-mode', compact);
   if (filtered.length === 0){
     wrap.innerHTML = `<div class="empty"><div class="emoji">🔍</div>조건에 맞는 오답이 없어요</div>`;
     return;
@@ -1378,8 +1548,9 @@ function renderList(){
       }
     }
     const starChar = e.starred ? '⭐' : '☆';
+    const expandedClass = expandedCardIds.has(e.id) ? 'expanded' : '';
     return `
-    <div class="entry-card">
+    <div class="entry-card ${expandedClass}">
       <div class="entry-top">
         <div class="entry-meta">
           <span class="tag" style="background:${c[0]};color:${c[1]}">${e.subject||'기타'}</span>
@@ -1394,7 +1565,7 @@ function renderList(){
         </div>
         <button class="star-btn" onclick="toggleStarred('${e.id}', ${!e.starred})">${starChar}</button>
       </div>
-      <div class="entry-q">${escapeHtml(e.questionText||'(내용 없음)')}</div>
+      <div class="entry-q" onclick="toggleCardExpand('${e.id}')" style="cursor:pointer;">${escapeHtml(e.questionText||'(내용 없음)')}</div>
       <div class="entry-ans"><b>학생 답:</b> ${escapeHtml(e.studentAnswer||'-')} &nbsp;·&nbsp; <b>정답:</b> ${escapeHtml(e.correctAnswer||'-')}</div>
       <div class="entry-actions">
         <button class="icon-btn" onclick="deleteEntry('${e.id}')">🗑 삭제</button>
