@@ -132,6 +132,7 @@
   .entry-q{font-size:14.5px; font-weight:700; line-height:1.4; margin:8px 0 6px;}
   .entry-meta{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;}
   .entry-ans{font-size:12.5px; color:var(--text-sub); line-height:1.7;}
+  .passage-box{background:var(--bg); border-left:3px solid var(--primary-soft); border-radius:8px; padding:10px 12px; font-size:12.5px; line-height:1.7; color:var(--text-sub); white-space:pre-wrap; margin-bottom:8px; cursor:pointer; max-height:120px; overflow-y:auto;}
   .entry-ans b{color:var(--text); font-weight:700;}
   .entry-actions{display:flex; gap:6px; margin-top:12px;}
   .icon-btn{border:none; background:var(--bg); border-radius:10px; padding:8px 10px; font-size:12px; font-weight:700; color:var(--text-sub); cursor:pointer; display:flex; align-items:center; gap:4px;}
@@ -150,7 +151,8 @@
   #listArea.compact-mode .entry-card:not(.expanded) .entry-ans,
   #listArea.compact-mode .entry-card:not(.expanded) .entry-actions,
   #listArea.compact-mode .entry-card:not(.expanded) .retry-toggle,
-  #listArea.compact-mode .entry-card:not(.expanded) .ai-inline-box{ display:none; }
+  #listArea.compact-mode .entry-card:not(.expanded) .ai-inline-box,
+  #listArea.compact-mode .entry-card:not(.expanded) .passage-box{ display:none; }
 
   /* ---------- 통계 ---------- */
   .chart-card{background:var(--surface); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); margin-bottom:14px;}
@@ -505,7 +507,7 @@ const firebaseConfig = {
   messagingSenderId: "426411231100",
   appId: "1:426411231100:web:805352c49ffd3c9f8306f9"
 };
-const GEMINI_API_KEY = "AQ.Ab8RN6Km1WjLUaMFv0yiBYrgo8buFbbgCpryUb2D_HJlbFymAg";
+const GEMINI_API_KEY = "여기에_본인_키_붙여넣기";
 const GEMINI_MODEL = "gemini-3.6-flash";
 /* ========================================================= */
 
@@ -597,10 +599,10 @@ window.toggleDarkMode = function(checked){
 
 window.exportCSV = function(){
   if (entries.length === 0){ showToast('내보낼 데이터가 없어요'); return; }
-  const headers = ['날짜','학년','학기','과목','단원','난이도','문제','학생답','정답','오답사유','즐겨찾기','졸업여부','연속정답','다음복습일'];
+  const headers = ['날짜','학년','학기','과목','단원','난이도','문제유형','지문','문제','보기','학생답','정답','오답사유','즐겨찾기','졸업여부','연속정답','다음복습일'];
   const rows = entries.map(e => [
-    e.date||'', e.grade||'', e.semester||'', e.subject||'', e.unit||'', e.difficulty||'',
-    e.questionText||'', e.studentAnswer||'', e.correctAnswer||'',
+    e.date||'', e.grade||'', e.semester||'', e.subject||'', e.unit||'', e.difficulty||'', e.questionType||'단답형',
+    e.passage||'', e.questionText||'', (Array.isArray(e.options)?e.options.join(' / '):''), e.studentAnswer||'', e.correctAnswer||'',
     e.reason||'', e.starred ? 'Y' : 'N', e.graduated ? 'Y' : 'N', e.consecutiveCorrect||0, e.nextReviewDate||''
   ]);
   const csv = [headers, ...rows]
@@ -744,11 +746,17 @@ window.runAnalyze = async function(){
   try {
     const prompt = `이 이미지에는 초등학생이 푼 시험지 또는 문제집의 오답이 1개 이상 포함되어 있을 수 있습니다.
 이미지에서 찾을 수 있는 "틀린" 문제만 최대 ${MAX_PROBLEMS}개까지 찾아 각각 아래 형식으로 정리해서, 순수 JSON 객체 하나로만 응답하세요. 다른 설명이나 코드블록 없이 JSON만 반환하세요. 맞은 문제는 포함하지 마세요. 오답이 1개뿐이면 배열에 1개만 넣으세요.
-{"problems":[{"subject":"국어/수학/영어/사회/과학 중 추정되는 과목(모르면 빈 문자열)","unit":"이 문제가 속한 단원 추정(예: 분수, 소수, 도형, 독해, 어휘, 문법 등. 모르면 빈 문자열)","difficulty":"하/중/상 중 추정 난이도","questionText":"문제 내용을 간략히 정리","studentAnswer":"학생이 작성한 답(보이면 적고 안 보이면 빈 문자열)","correctAnswer":"정답(보이거나 유추 가능하면 적고 아니면 빈 문자열)"}]}`;
+questionType은 "단답형"(한 단어/숫자로 답하는 문제), "객관식"(①②③④ 같은 보기 중에서 고르는 문제), "서술형"(문장으로 풀어 설명하는 문제) 중 하나로 판단하세요.
+객관식인 경우 options 배열에 보기를 각각의 항목으로 순서대로 모두 담고(예: "① 15", "② 20"...), correctAnswer와 studentAnswer는 정답/학생이 고른 보기의 번호만 적으세요(예: "3").
+국어 지문형 문제, 영어 지문형 문제처럼 읽기 지문(이야기글/설명문/대화문 등)이 딸린 문제는, 그 지문 전체를 절대 요약하지 말고 원문 그대로 passage 필드에 옮겨 적으세요(줄바꿈 포함해도 됩니다). questionText에는 지문 내용을 넣지 말고 실제로 묻는 질문 문장만 담으세요. 지문이 없는 문제는 passage를 빈 문자열로 두세요.
+{"problems":[{"subject":"국어/수학/영어/사회/과학 중 추정되는 과목(모르면 빈 문자열)","unit":"이 문제가 속한 단원 추정(예: 분수, 소수, 도형, 독해, 어휘, 문법 등. 모르면 빈 문자열)","difficulty":"하/중/상 중 추정 난이도","questionType":"단답형/객관식/서술형 중 하나","passage":"읽기 지문이 있으면 전체 원문 그대로, 없으면 빈 문자열","questionText":"실제로 묻는 질문 문장만","options":["객관식인 경우 보기 목록, 아니면 빈 배열"],"studentAnswer":"학생이 작성한 답(보이면 적고 안 보이면 빈 문자열)","correctAnswer":"정답(보이거나 유추 가능하면 적고 아니면 빈 문자열)"}]}`;
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: currentImage.mimeType, data: currentImage.base64 } }] }] })
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: currentImage.mimeType, data: currentImage.base64 } }] }],
+        generationConfig: { maxOutputTokens: 16384, temperature: 0.4 }
+      })
     });
     const json = await res.json();
     if (json.error) throw new Error('API 오류: ' + json.error.message);
@@ -770,6 +778,9 @@ window.runAnalyze = async function(){
       subject: ['국어','수학','영어','사회','과학'].includes(p.subject) ? p.subject : '기타',
       unit: p.unit || '',
       difficulty: DIFFICULTIES.includes(p.difficulty) ? p.difficulty : '중',
+      questionType: ['단답형','객관식','서술형'].includes(p.questionType) ? p.questionType : '단답형',
+      passage: p.passage || '',
+      options: Array.isArray(p.options) ? p.options.filter(Boolean) : [],
       questionText: p.questionText || '',
       studentAnswer: p.studentAnswer || '',
       correctAnswer: p.correctAnswer || '',
@@ -868,14 +879,20 @@ function renderExam(){
     </div>
   ` + currentExam.map((e,i) => {
     const c = SUBJECT_COLORS[e.subject] || SUBJECT_COLORS['기타'];
+    const optionsHtml = (e.questionType === '객관식' && Array.isArray(e.options) && e.options.length)
+      ? `<div class="entry-ans" style="margin-top:6px;">${e.options.map(opt => `<div>${escapeHtml(opt)}</div>`).join('')}</div>`
+      : '';
+    const passageHtml = e.passage ? `<div class="passage-box">${escapeHtml(e.passage)}</div>` : '';
     return `
     <div class="entry-card">
       <div class="entry-meta" style="margin-bottom:8px;">
         <span class="tag" style="background:${c[0]};color:${c[1]}">${e.subject||'기타'}</span>
         ${e.unit ? `<span class="tag" style="background:#F0F0F5;color:#8B90A0">📘 ${e.unit}</span>` : ''}
       </div>
+      ${passageHtml}
       <div class="entry-q">${i+1}. ${escapeHtml(e.questionText||'(내용 없음)')}</div>
-      <input type="text" id="examAnswer-${i}" placeholder="답을 입력하세요" style="margin-top:8px;" />
+      ${optionsHtml}
+      <input type="text" id="examAnswer-${i}" placeholder="${e.questionType==='객관식' ? '보기 번호를 입력하세요' : '답을 입력하세요'}" style="margin-top:8px;" />
       <div id="examFeedback-${i}" style="margin-top:6px; font-size:12.5px;"></div>
     </div>`;
   }).join('');
@@ -908,11 +925,18 @@ window.printExam = function(){
   const area = document.getElementById('examPrintArea');
   const dateStr = new Date().toLocaleDateString('ko-KR');
   let html = `<h1>오답노트 시험지</h1><div style="margin:14px 0 24px;">이름: ______________ &nbsp;&nbsp;&nbsp; 날짜: ${dateStr}</div>`;
-  html += currentExam.map((e,i) => `
+  html += currentExam.map((e,i) => {
+    const optionsHtml = (e.questionType === '객관식' && Array.isArray(e.options) && e.options.length)
+      ? `<div style="margin:6px 0 0 14px;">${e.options.map(opt => `<div>${escapeHtml(opt)}</div>`).join('')}</div>`
+      : `<div style="margin-top:34px; border-bottom:1px solid #999; width:70%;"></div>`;
+    const passageHtml = e.passage ? `<div style="border-left:3px solid #ccc; padding:8px 12px; margin:6px 0; font-size:13px; white-space:pre-wrap;">${escapeHtml(e.passage)}</div>` : '';
+    return `
     <div style="margin-bottom:26px;">
+      ${passageHtml}
       <div><b>${i+1}.</b> ${escapeHtml(e.questionText||'')}</div>
-      <div style="margin-top:34px; border-bottom:1px solid #999; width:70%;"></div>
-    </div>`).join('');
+      ${optionsHtml}
+    </div>`;
+  }).join('');
   html += `<div class="exam-print-page-break"></div><h2>정답</h2>`;
   html += `<ol>` + currentExam.map(e => `<li>${escapeHtml(e.correctAnswer || '(정답 정보 없음)')}</li>`).join('') + `</ol>`;
   area.innerHTML = html;
@@ -932,16 +956,19 @@ window.startHintFlow = async function(id){
   if (hintCache[id]){ renderHintStage(id, 0); return; }
 
   try {
+    const optionsText = (e.questionType === '객관식' && Array.isArray(e.options) && e.options.length)
+      ? `\n보기: ${e.options.join(' / ')}` : '';
+    const passageText = e.passage ? `\n지문: ${e.passage}` : '';
     const prompt = `당신은 초등학생을 위한 친절한 학습 코치입니다. 아래 문제를 학생이 스스로 정답에 다가갈 수 있도록 단계적으로 안내하려 합니다.
 정답을 직접 알려주지 않는 힌트 2개(hint1이 더 가볍고, hint2가 더 구체적), 그리고 단계별 풀이 설명(explanation), 마지막으로 최종 정답(answer)을 아래 JSON 형식으로만 응답하세요. 다른 설명 없이 JSON만 반환하세요.
-학년: ${e.grade || '초등'}, 과목: ${e.subject || ''}, 단원: ${e.unit || ''}
-문제: ${e.questionText}
+학년: ${e.grade || '초등'}, 과목: ${e.subject || ''}, 단원: ${e.unit || ''}, 문제 유형: ${e.questionType || '단답형'}${passageText}
+문제: ${e.questionText}${optionsText}
 정답 참고: ${e.correctAnswer || '(제공된 정답 없음, 문제로부터 추론)'}
 {"hint1":"...","hint2":"...","explanation":"...","answer":"..."}`;
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 3072, temperature: 0.5 } })
     });
     const json = await res.json();
     if (json.error) throw new Error('API 오류: ' + json.error.message);
@@ -992,15 +1019,24 @@ window.generateSimilarProblem = async function(id){
   container.innerHTML = '<span class="spinner" style="border-top-color:var(--primary); border-color:rgba(108,92,231,.3);"></span>유사문제 만드는 중...';
 
   try {
-    const prompt = `당신은 초등학교 문제 출제 전문가입니다. 아래 문제와 같은 단원, 같은 난이도, 같은 유형이되 숫자/보기/문장을 새롭게 바꾼 유사문제를 1개 만들어주세요. 아래 JSON 형식으로만 응답하세요. 다른 설명 없이 JSON만 반환하세요.
-학년: ${e.grade || '초등'}, 과목: ${e.subject || ''}, 단원: ${e.unit || ''}, 난이도: ${e.difficulty || '중'}
-원래 문제: ${e.questionText}
+    const optionsText = (e.questionType === '객관식' && Array.isArray(e.options) && e.options.length)
+      ? `\n원래 보기: ${e.options.join(' / ')}` : '';
+    const optionsInstruction = e.questionType === '객관식'
+      ? ' 객관식 문제이므로 options 배열에 새 보기를 원래와 같은 개수로 만들어주세요.'
+      : '';
+    const passageText = e.passage ? `\n원래 지문: ${e.passage}` : '';
+    const passageInstruction = e.passage
+      ? ' 원래 문제에 읽기 지문이 있으므로, 요약하지 말고 비슷한 주제/난이도의 완전히 새로운 지문을 처음부터 끝까지 새로 작성해서 passage 필드에 담아주세요(원래 지문을 그대로 베끼지 마세요).'
+      : '';
+    const prompt = `당신은 초등학교 문제 출제 전문가입니다. 아래 문제와 같은 단원, 같은 난이도, 같은 유형이되 숫자/보기/문장을 새롭게 바꾼 유사문제를 1개 만들어주세요.${optionsInstruction}${passageInstruction} 아래 JSON 형식으로만 응답하세요. 다른 설명 없이 JSON만 반환하세요.
+학년: ${e.grade || '초등'}, 과목: ${e.subject || ''}, 단원: ${e.unit || ''}, 난이도: ${e.difficulty || '중'}, 문제 유형: ${e.questionType || '단답형'}${passageText}
+원래 문제: ${e.questionText}${optionsText}
 원래 정답: ${e.correctAnswer || ''}
-{"questionText":"새로운 문제 내용","correctAnswer":"새로운 문제의 정답"}`;
+{"passage":"읽기 지문이 필요한 문제면 새로 작성한 지문 전체, 아니면 빈 문자열","questionText":"새로운 질문 내용","options":["객관식인 경우 새 보기 목록, 아니면 빈 배열"],"correctAnswer":"새로운 문제의 정답"}`;
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 4096, temperature: 0.6 } })
     });
     const json = await res.json();
     if (json.error) throw new Error('API 오류: ' + json.error.message);
@@ -1009,8 +1045,14 @@ window.generateSimilarProblem = async function(id){
     text = text.replace(/```json/g,'').replace(/```/g,'').trim();
     const parsed = JSON.parse(text);
     similarCache[id] = parsed;
+    const optionsPreview = (Array.isArray(parsed.options) && parsed.options.length)
+      ? `<div style="margin-top:4px;">${parsed.options.map(o => `<div>${escapeHtml(o)}</div>`).join('')}</div>`
+      : '';
+    const passagePreview = parsed.passage ? `<div class="passage-box" style="margin-top:0; margin-bottom:8px;">${escapeHtml(parsed.passage)}</div>` : '';
     container.innerHTML = `
+      ${passagePreview}
       <div><b>새 문제:</b> ${escapeHtml(parsed.questionText || '')}</div>
+      ${optionsPreview}
       <div style="margin-top:4px;"><b>정답:</b> ${escapeHtml(parsed.correctAnswer || '')}</div>
       <button class="btn btn-primary" style="margin-top:10px;" onclick="saveSimilarProblem('${id}')">➕ 오답노트에 추가</button>
       <button class="btn btn-ghost" style="margin-top:6px;" onclick="closeSimilar('${id}')">닫기</button>
@@ -1044,6 +1086,9 @@ window.saveSimilarProblem = async function(id){
       subject: orig.subject || '기타',
       unit: orig.unit || '',
       difficulty: orig.difficulty || '중',
+      questionType: orig.questionType || '단답형',
+      passage: sim.passage || '',
+      options: Array.isArray(sim.options) ? sim.options.filter(Boolean) : [],
       questionText: sim.questionText || '',
       studentAnswer: '',
       correctAnswer: sim.correctAnswer || '',
@@ -1126,7 +1171,7 @@ ${summaryText}`;
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 1024, temperature: 0.6 } })
     });
     const json = await res.json();
     if (json.error) throw new Error('API 오류: ' + json.error.message);
@@ -1170,14 +1215,30 @@ function renderProblemCards(){
         </div>
       </div>
 
-      <label class="field-label">문제 내용</label>
+      <label class="field-label">지문 (있는 경우, 없으면 비워두세요)</label>
+      <textarea oninput="updateCardField(${i},'passage',this.value)" placeholder="읽기 지문이 있는 문제만 여기에 원문 전체를 입력하세요" style="min-height:90px;">${escapeHtml(p.passage||'')}</textarea>
+
+      <label class="field-label">문제 내용 (실제 질문)</label>
       <textarea oninput="updateCardField(${i},'questionText',this.value)" placeholder="문제 내용을 입력하세요">${escapeHtml(p.questionText)}</textarea>
 
+      <label class="field-label">문제 유형</label>
+      <select onchange="updateCardField(${i},'questionType',this.value); renderProblemCards();">
+        <option value="단답형" ${p.questionType==='단답형'?'selected':''}>단답형</option>
+        <option value="객관식" ${p.questionType==='객관식'?'selected':''}>객관식</option>
+        <option value="서술형" ${p.questionType==='서술형'?'selected':''}>서술형</option>
+      </select>
+
+      ${p.questionType === '객관식' ? `
+      <label class="field-label">보기 (한 줄에 하나씩 입력)</label>
+      <textarea oninput="updateCardOptions(${i}, this.value)" placeholder="① 보기1&#10;② 보기2&#10;③ 보기3&#10;④ 보기4">${escapeHtml((p.options||[]).join('\n'))}</textarea>
+      <div style="font-size:11.5px; color:var(--text-sub); margin-top:-4px; margin-bottom:8px;">아래 학생 답/정답 칸에는 몇 번을 골랐는지 번호로 적어주세요 (예: 3)</div>
+      ` : ''}
+
       <label class="field-label">아이가 쓴 답</label>
-      <input type="text" value="${escapeAttr(p.studentAnswer)}" oninput="updateCardField(${i},'studentAnswer',this.value)" placeholder="학생이 작성한 답" />
+      <input type="text" value="${escapeAttr(p.studentAnswer)}" oninput="updateCardField(${i},'studentAnswer',this.value)" placeholder="${p.questionType==='객관식' ? '고른 보기 번호' : '학생이 작성한 답'}" />
 
       <label class="field-label">정답</label>
-      <input type="text" value="${escapeAttr(p.correctAnswer)}" oninput="updateCardField(${i},'correctAnswer',this.value)" placeholder="정답" />
+      <input type="text" value="${escapeAttr(p.correctAnswer)}" oninput="updateCardField(${i},'correctAnswer',this.value)" placeholder="${p.questionType==='객관식' ? '정답 보기 번호' : '정답'}" />
 
       <label class="field-label">틀린 이유</label>
       <select onchange="onReasonChange(${i}, this.value)">${reasonOptions}</select>
@@ -1192,6 +1253,10 @@ function renderProblemCards(){
 
 window.updateCardField = function(idx, field, value){
   if (problemCards[idx]) problemCards[idx][field] = value;
+};
+
+window.updateCardOptions = function(idx, text){
+  if (problemCards[idx]) problemCards[idx].options = text.split('\n').map(s => s.trim()).filter(Boolean);
 };
 
 window.onReasonChange = function(idx, value){
@@ -1216,7 +1281,7 @@ window.confirmNewReasonForCard = async function(idx){
 };
 
 window.addBlankProblemCard = function(){
-  problemCards.push({ subject:'기타', unit:'', difficulty:'중', questionText:'', studentAnswer:'', correctAnswer:'', reason: reasons[0] || '' });
+  problemCards.push({ subject:'기타', unit:'', difficulty:'중', questionType:'단답형', passage:'', options:[], questionText:'', studentAnswer:'', correctAnswer:'', reason: reasons[0] || '' });
   renderProblemCards();
 };
 
@@ -1241,6 +1306,9 @@ window.saveAllEntries = async function(){
       subject: p.subject,
       unit: p.unit || '',
       difficulty: p.difficulty || '중',
+      questionType: p.questionType || '단답형',
+      passage: p.passage || '',
+      options: p.options || [],
       questionText: p.questionText,
       studentAnswer: p.studentAnswer,
       correctAnswer: p.correctAnswer,
@@ -1549,6 +1617,11 @@ function renderList(){
     }
     const starChar = e.starred ? '⭐' : '☆';
     const expandedClass = expandedCardIds.has(e.id) ? 'expanded' : '';
+    const typeTag = (e.questionType && e.questionType !== '단답형') ? `<span class="tag" style="background:#EEE3FF;color:#8B5CF6">${e.questionType==='객관식'?'🔘':'✏️'} ${e.questionType}</span>` : '';
+    const optionsHtml = (e.questionType === '객관식' && Array.isArray(e.options) && e.options.length)
+      ? `<div class="entry-ans" style="margin-top:4px;">${e.options.map(opt => `<div>${escapeHtml(opt)}</div>`).join('')}</div>`
+      : '';
+    const passageHtml = e.passage ? `<div class="passage-box" onclick="toggleCardExpand('${e.id}')">${escapeHtml(e.passage)}</div>` : '';
     return `
     <div class="entry-card ${expandedClass}">
       <div class="entry-top">
@@ -1556,6 +1629,7 @@ function renderList(){
           <span class="tag" style="background:${c[0]};color:${c[1]}">${e.subject||'기타'}</span>
           ${gradeTag}
           ${unitTag}
+          ${typeTag}
           ${diffTag}
           ${streakTag}
           ${graduatedTag}
@@ -1565,7 +1639,9 @@ function renderList(){
         </div>
         <button class="star-btn" onclick="toggleStarred('${e.id}', ${!e.starred})">${starChar}</button>
       </div>
+      ${passageHtml}
       <div class="entry-q" onclick="toggleCardExpand('${e.id}')" style="cursor:pointer;">${escapeHtml(e.questionText||'(내용 없음)')}</div>
+      ${optionsHtml}
       <div class="entry-ans"><b>학생 답:</b> ${escapeHtml(e.studentAnswer||'-')} &nbsp;·&nbsp; <b>정답:</b> ${escapeHtml(e.correctAnswer||'-')}</div>
       <div class="entry-actions">
         <button class="icon-btn" onclick="deleteEntry('${e.id}')">🗑 삭제</button>
