@@ -1267,37 +1267,40 @@ window.saveSimilarProblem = async function(id){
   if (!orig || !sim) return;
   try {
     const practiceReason = '유사문제 연습';
-    if (!reasons.includes(practiceReason)){
-      reasons.push(practiceReason);
-      fillReasonSelects();
-    }
-    await addDoc(collection(db, "entries"), {
-      date: todayStr(),
-      grade: orig.grade || settings.defaultGrade,
-      semester: orig.semester || settings.defaultSemester,
-      subject: orig.subject || '기타',
-      unit: orig.unit || '',
-      difficulty: orig.difficulty || '중',
-      questionType: orig.questionType || '단답형',
-      passage: sim.passage || '',
-      options: Array.isArray(sim.options) ? sim.options.filter(Boolean) : [],
-      questionText: sim.questionText || '',
-      studentAnswer: '',
-      correctAnswer: sim.correctAnswer || '',
-      reason: practiceReason,
-      retried: false,
-      retriedCorrect: null,
-      starred: false,
-      consecutiveCorrect: 0,
-      graduated: false,
-      reviewStage: 0,
-      nextReviewDate: todayStr(),
-      createdAt: serverTimestamp()
-    });
+    if (!reasons.includes(practiceReason)){ reasons.push(practiceReason); fillReasonSelects(); }
+    const date=todayStr();
+    const item={
+      id:newEntryId(),
+      date,
+      grade:orig.grade||settings.defaultGrade,
+      semester:orig.semester||settings.defaultSemester,
+      subject:orig.subject||'기타',
+      domain:orig.domain||'',
+      unit:orig.unit||'',
+      concept:orig.concept||'',
+      sourceType:orig.sourceType||'',
+      skill:orig.skill||'',
+      misconception:'',
+      visualDescription:sim.visualDescription||'',
+      difficulty:orig.difficulty||'중',
+      questionType:orig.questionType||'단답형',
+      passage:sim.passage||'',
+      options:Array.isArray(sim.options)?sim.options.filter(Boolean):[],
+      questionText:sim.questionText||'',
+      mathLatex:sim.mathLatex||'',
+      studentAnswer:'',
+      correctAnswer:sim.correctAnswer||'',
+      confidence:100,
+      reason:practiceReason,
+      retried:false,retriedCorrect:null,starred:false,consecutiveCorrect:0,graduated:false,
+      reviewStage:0,nextReviewDate:date,createdAtMs:Date.now(),reviewCounts:{}
+    };
+    await writeEntryDayItems(date,[item]);
+    entries=[{...item,dayDocId:date},...entries].sort((a,b)=>entryTimestampMs(b)-entryTimestampMs(a));
+    localStorage.setItem(ENTRY_SYNC_KEY,String(Date.now()));
     showToast('유사문제를 오답노트에 추가했어요 ✓');
     closeSimilar(id);
-    await loadEntries();
-    renderHome(); renderList(); renderStats();
+    fillFilterOptions(); renderHome(); renderList(); renderStats();
   } catch(err){
     console.error(err);
     showToast('저장 실패: ' + err.message, 5000);
@@ -1850,6 +1853,9 @@ function renderList(){
     const retriedChecked = e.retried ? 'checked' : '';
     const gradeTag = e.grade ? `<span class="tag" style="background:#F0F0F5;color:#8B90A0">${e.grade}${e.semester ? ' · '+e.semester : ''}</span>` : '';
     const unitTag = e.unit ? `<span class="tag" style="background:#F0F0F5;color:#8B90A0">📘 ${e.unit}</span>` : '';
+    const conceptTag = e.concept ? `<span class="tag" style="background:#EAF7FF;color:#2673A6">🧠 ${escapeHtml(e.concept)}</span>` : '';
+    const sourceTag = e.sourceType ? `<span class="tag" style="background:#F4EEFF;color:#7451B9">🗂 ${escapeHtml(e.sourceType)}</span>` : '';
+    const skillTag = e.skill ? `<span class="tag" style="background:#E9F8F1;color:#16835F">🎯 ${escapeHtml(e.skill)}</span>` : '';
     const diffColors = { '하':['#E4F9F3','#00B894'], '중':['#FFF6E0','#E0A200'], '상':['#FFECEC','#E02020'] };
     const diffTag = e.difficulty ? `<span class="tag" style="background:${(diffColors[e.difficulty]||['#F0F0F5','#8B90A0'])[0]};color:${(diffColors[e.difficulty]||['#F0F0F5','#8B90A0'])[1]}">난이도 ${e.difficulty}</span>` : '';
     const streak = e.consecutiveCorrect || 0;
@@ -1881,6 +1887,9 @@ function renderList(){
           <span class="tag" style="background:${c[0]};color:${c[1]}">${e.subject||'기타'}</span>
           ${gradeTag}
           ${unitTag}
+          ${conceptTag}
+          ${sourceTag}
+          ${skillTag}
           ${typeTag}
           ${diffTag}
           ${streakTag}
@@ -1897,6 +1906,8 @@ function renderList(){
       ${mathHtml}
       ${optionsHtml}
       <div class="entry-ans"><b>학생 답:</b> ${escapeHtml(e.studentAnswer||'-')} &nbsp;·&nbsp; <b>정답:</b> ${escapeHtml(e.correctAnswer||'-')}</div>
+      ${e.visualDescription ? `<div class="entry-ans"><b>시각자료:</b> ${escapeHtml(e.visualDescription)}</div>` : ''}
+      ${e.misconception ? `<div class="entry-ans"><b>오개념:</b> ${escapeHtml(e.misconception)}</div>` : ''}
       <div class="entry-actions">
         <button class="icon-btn" onclick="deleteEntry('${e.id}')">🗑 삭제</button>
         <button class="icon-btn" onclick="startHintFlow('${e.id}')">💡 힌트로 풀기</button>
@@ -1918,59 +1929,62 @@ function renderList(){
 }
 
 window.toggleStarred = async function(id, value){
-  await updateDoc(doc(db, "entries", id), { starred: value });
-  const e = entries.find(x => x.id === id); if (e) e.starred = value;
+  await updateEntryFields(id,{starred:value});
   renderList(); renderHome();
 };
 
 window.unGraduate = async function(id){
-  await updateDoc(doc(db, "entries", id), { graduated: false, consecutiveCorrect: 0 });
-  const e = entries.find(x => x.id === id); if (e){ e.graduated = false; e.consecutiveCorrect = 0; }
+  await updateEntryFields(id,{graduated:false,consecutiveCorrect:0});
   renderList(); renderHome();
 };
 
 window.deleteEntry = async function(id){
   if (!confirm('이 오답을 삭제할까요?')) return;
-  await deleteDoc(doc(db, "entries", id));
-  entries = entries.filter(e => e.id !== id);
+  await deleteEntryFromDay(id);
+  entries=entries.filter(e=>e.id!==id);
+  recomputeMonthlyReviewCount();
   renderHome(); renderList(); renderStats();
   showToast('삭제했어요');
 };
 
 window.toggleRetried = async function(id, checked){
-  await updateDoc(doc(db, "entries", id), { retried: checked, retriedCorrect: checked ? entries.find(e=>e.id===id).retriedCorrect : null });
-  const e = entries.find(x => x.id === id); e.retried = checked; if (!checked) e.retriedCorrect = null;
+  const e=entries.find(x=>x.id===id);
+  if(!e)return;
+  await updateEntryFields(id,{retried:checked,retriedCorrect:checked?e.retriedCorrect:null});
   renderList();
 };
 
 window.setRetryResult = async function(id, correct){
-  const e = entries.find(x => x.id === id);
-  const prevStreak = (e && e.consecutiveCorrect) || 0;
-  const newStreak = correct ? prevStreak + 1 : 0;
-  const graduated = newStreak >= 3;
-
-  const prevStage = (e && e.reviewStage) || 0;
-  let newStage, nextReviewDate;
-  if (correct){
-    if (prevStage < REVIEW_INTERVALS.length){
-      nextReviewDate = addDaysStr(REVIEW_INTERVALS[prevStage]);
-      newStage = prevStage + 1;
-    } else {
-      newStage = prevStage; // 이미 전 단계 통과, 더 이상 예정 없음
-      nextReviewDate = null;
+  const e=entries.find(x=>x.id===id);
+  if(!e)return;
+  const prevStreak=e.consecutiveCorrect||0;
+  const newStreak=correct?prevStreak+1:0;
+  const graduated=newStreak>=3;
+  const prevStage=e.reviewStage||0;
+  let newStage,nextReviewDate;
+  if(correct){
+    if(prevStage<REVIEW_INTERVALS.length){
+      nextReviewDate=addDaysStr(REVIEW_INTERVALS[prevStage]);
+      newStage=prevStage+1;
+    }else{
+      newStage=prevStage;
+      nextReviewDate=null;
     }
-  } else {
-    newStage = 0;
-    nextReviewDate = todayStr();
+  }else{
+    newStage=0;
+    nextReviewDate=todayStr();
   }
-
-  const today = todayStr();
-  await updateDoc(doc(db, "entries", id), { retried: true, retriedCorrect: correct, consecutiveCorrect: newStreak, graduated, reviewStage: newStage, nextReviewDate, lastReviewedAt: today });
-  if (e){ e.retried = true; e.retriedCorrect = correct; e.consecutiveCorrect = newStreak; e.graduated = graduated; e.reviewStage = newStage; e.nextReviewDate = nextReviewDate; e.lastReviewedAt = today; }
+  const today=todayStr();
+  const month=currentMonthKey();
+  const reviewCounts={...(e.reviewCounts||{}),[month]:Number(e.reviewCounts?.[month]||0)+1};
+  await updateEntryFields(id,{
+    retried:true,retriedCorrect:correct,consecutiveCorrect:newStreak,graduated,
+    reviewStage:newStage,nextReviewDate,lastReviewedAt:today,reviewCounts
+  });
   bumpMonthlyReviewCount();
   renderList(); renderStats(); renderHome();
-  if (graduated) showToast('🎓 3번 연속 정답! 이 문제는 졸업했어요');
-  else if (correct && nextReviewDate) showToast('다음 복습: ' + nextReviewDate);
+  if(graduated)showToast('🎓 3번 연속 정답! 이 문제는 졸업했어요');
+  else if(correct&&nextReviewDate)showToast('다음 복습: '+nextReviewDate);
 };
 
 /* ---------------- 통계 렌더 ---------------- */
