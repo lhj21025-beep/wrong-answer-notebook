@@ -10,7 +10,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>\n<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />\n<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <style>
   :root{
     --bg:#F5F5FB;
@@ -514,10 +516,12 @@ const GEMINI_MODEL = "gemini-3.6-flash";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
   getFirestore, collection, addDoc, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, increment
-} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";\nimport { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);\nconst storage = getStorage(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
 
 const DEFAULT_REASONS = ["계산실수", "개념이해 부족", "문제를 끝까지 읽지 않음", "단위 실수", "공식 암기 부족", "시간 부족", "부주의", "찍음", "응용력 부족", "집중력 부족", "기타"];
 const GRADES = ["초1","초2","초3","초4","초5","초6"];
@@ -704,7 +708,8 @@ window.goToDueReview = function(){
 async function handleFileSelected(e){
   const file = e.target.files[0];
   if (!file) return;
-  // 분수·작은 글씨·긴 지문의 인식 정확도를 위해 고해상도를 유지합니다.\n  const compressed = await compressImage(file, 2200, 0.90);
+  // 분수·작은 글씨·긴 지문의 인식 정확도를 위해 고해상도를 유지합니다.
+  const compressed = await compressImage(file, 2200, 0.90);
   currentImage = compressed;
   document.getElementById('previewImg').src = 'data:' + compressed.mimeType + ';base64,' + compressed.base64;
   document.getElementById('previewImg').style.display = 'block';
