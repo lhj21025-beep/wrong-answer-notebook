@@ -515,13 +515,16 @@ const GEMINI_MODEL = "gemini-3.6-flash";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
-  getFirestore, collection, addDoc, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, increment
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  collection, addDoc, getDocs, getDocsFromCache, doc, getDoc, setDoc, updateDoc,
+  query, orderBy, serverTimestamp, increment, FieldPath, deleteField, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-import { getStorage, ref as storageRef, uploadString, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const storage = getStorage(app);
+// 피트니스 다이어리/가족 스케줄러와 같은 방식: 브라우저 IndexedDB 영구 캐시
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
 
 const DEFAULT_REASONS = ["계산실수", "개념이해 부족", "문제를 끝까지 읽지 않음", "단위 실수", "공식 암기 부족", "시간 부족", "부주의", "찍음", "응용력 부족", "집중력 부족", "기타"];
 const GRADES = ["초1","초2","초3","초4","초5","초6"];
@@ -540,6 +543,53 @@ let problemCards = [];
 let settings = { defaultGrade: '초4', defaultSemester: '1학기', lastGradeBumpYear: null, monthlyGoal: 100 };
 const MAX_PROBLEMS = 5;
 let monthlyReviewCount = 0;
+
+const ENTRY_SERVER_SYNC_TTL = 30 * 60 * 1000; // 30분
+const ENTRY_SYNC_KEY = 'oedapnote_entries_last_server_sync';
+const ENTRY_DAYS_MIGRATION_KEY = 'oedapnote_entrydays_migrated_v1';
+
+function entryFieldKey(id){ return String(id).replace(/[^A-Za-z0-9_]/g, '_'); }
+function newEntryId(){ return (crypto.randomUUID ? crypto.randomUUID().replaceAll('-','') : 'e'+Date.now()+Math.random().toString(36).slice(2)); }
+function entryTimestampMs(e){
+  if (Number.isFinite(Number(e?.createdAtMs))) return Number(e.createdAtMs);
+  if (e?.createdAt?.toDate) return e.createdAt.toDate().getTime();
+  return 0;
+}
+function shouldSyncEntriesFromServer(){
+  const last = Number(localStorage.getItem(ENTRY_SYNC_KEY) || 0);
+  return !last || (Date.now() - last > ENTRY_SERVER_SYNC_TTL);
+}
+function flattenEntryDays(snap){
+  const out=[];
+  snap.docs.forEach(d=>{
+    const data=d.data()||{};
+    Object.values(data.entries||{}).forEach(raw=>{
+      if(!raw || !raw.id) return;
+      out.push({...raw, dayDocId:d.id});
+    });
+  });
+  out.sort((a,b)=>entryTimestampMs(b)-entryTimestampMs(a));
+  return out;
+}
+async function writeEntryDayItems(date, items){
+  const map={};
+  items.forEach(e=>{ map[entryFieldKey(e.id)] = e; });
+  await setDoc(doc(db,'entryDays',date), { date, entries:map }, { merge:true });
+}
+async function updateEntryFields(id, patch){
+  const e=entries.find(x=>x.id===id);
+  if(!e) throw new Error('오답 데이터를 찾지 못했습니다.');
+  const next={...e,...patch};
+  delete next.dayDocId;
+  await updateDoc(doc(db,'entryDays',e.date), new FieldPath('entries',entryFieldKey(id)), next);
+  Object.assign(e,patch);
+}
+async function deleteEntryFromDay(id){
+  const e=entries.find(x=>x.id===id);
+  if(!e) return;
+  await updateDoc(doc(db,'entryDays',e.date), new FieldPath('entries',entryFieldKey(id)), deleteField());
+}
+
 
 /* ---------------- 초기 로딩 ---------------- */
 async function init(){
