@@ -1223,6 +1223,11 @@ function renderProblemCards(){
       <label class="field-label">문제 내용 (실제 질문)</label>
       <textarea oninput="updateCardField(${i},'questionText',this.value)" placeholder="문제 내용을 입력하세요">${escapeHtml(p.questionText)}</textarea>
 
+      <label class="field-label">수식 (LaTeX · 분수/계산식이 있는 경우)</label>
+      <input type="text" value="${escapeAttr(p.mathLatex||'')}" oninput="updateCardField(${i},'mathLatex',this.value); updateMathPreview(${i},this.value)" placeholder="예: \\frac{3}{4}+\\frac{2}{5}" />
+      <div class="math-box" id="mathPreview-${i}" style="${p.mathLatex ? '' : 'display:none;'}">${p.mathLatex ? renderMath(p.mathLatex) : ''}</div>
+      <div class="confidence-note ${confidenceClass(p.confidence)}">AI 인식 신뢰도: ${Number.isFinite(Number(p.confidence)) ? Math.round(Number(p.confidence)) : 70}%${Number(p.confidence) < 80 ? ' · 원문을 한 번 확인해주세요' : ''}</div>
+
       <label class="field-label">문제 유형</label>
       <select onchange="updateCardField(${i},'questionType',this.value); renderProblemCards();">
         <option value="단답형" ${p.questionType==='단답형'?'selected':''}>단답형</option>
@@ -1255,6 +1260,14 @@ function renderProblemCards(){
 
 window.updateCardField = function(idx, field, value){
   if (problemCards[idx]) problemCards[idx][field] = value;
+};
+
+window.updateMathPreview = function(idx, latex){
+  const el = document.getElementById('mathPreview-' + idx);
+  if (!el) return;
+  if (!String(latex || '').trim()){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'block';
+  el.innerHTML = renderMath(latex);
 };
 
 window.updateCardOptions = function(idx, text){
@@ -1813,6 +1826,19 @@ function renderCalendar(){
 
 /* ---------------- 유틸 ---------------- */
 function escapeHtml(str){ const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+function renderMath(latex){
+  if (!latex) return '';
+  try {
+    if (window.katex) return window.katex.renderToString(String(latex), { throwOnError:false, displayMode:true, strict:'ignore' });
+  } catch(e){ console.warn('KaTeX render failed', e); }
+  return '<code>' + escapeHtml(String(latex)) + '</code>';
+}
+function confidenceClass(value){
+  const n = Number(value);
+  if (!Number.isFinite(n) || n >= 90) return 'confidence-high';
+  if (n >= 75) return 'confidence-mid';
+  return 'confidence-low';
+}
 function escapeAttr(str){ return escapeHtml(str).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function todayStr(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
 function addDaysStr(days){ const d = new Date(); d.setDate(d.getDate() + days); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
