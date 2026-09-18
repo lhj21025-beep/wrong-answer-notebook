@@ -782,8 +782,10 @@ questionType은 "단답형"(한 단어/숫자로 답하는 문제), "객관식"(
       passage: p.passage || '',
       options: Array.isArray(p.options) ? p.options.filter(Boolean) : [],
       questionText: p.questionText || '',
+      mathLatex: p.mathLatex || '',
       studentAnswer: p.studentAnswer || '',
       correctAnswer: p.correctAnswer || '',
+      confidence: Number.isFinite(Number(p.confidence)) ? Math.max(0, Math.min(100, Math.round(Number(p.confidence)))) : 70,
       reason: reasons[0] || ''
     }));
     renderProblemCards();
@@ -1281,7 +1283,7 @@ window.confirmNewReasonForCard = async function(idx){
 };
 
 window.addBlankProblemCard = function(){
-  problemCards.push({ subject:'기타', unit:'', difficulty:'중', questionType:'단답형', passage:'', options:[], questionText:'', studentAnswer:'', correctAnswer:'', reason: reasons[0] || '' });
+  problemCards.push({ subject:'기타', unit:'', difficulty:'중', questionType:'단답형', passage:'', options:[], questionText:'', mathLatex:'', studentAnswer:'', correctAnswer:'', confidence:100, reason: reasons[0] || '' });
   renderProblemCards();
 };
 
@@ -1310,8 +1312,10 @@ window.saveAllEntries = async function(){
       passage: p.passage || '',
       options: p.options || [],
       questionText: p.questionText,
+      mathLatex: p.mathLatex || '',
       studentAnswer: p.studentAnswer,
       correctAnswer: p.correctAnswer,
+      confidence: Number.isFinite(Number(p.confidence)) ? Number(p.confidence) : null,
       reason: p.reason || reasons[0] || '기타',
       retried: false,
       retriedCorrect: null,
