@@ -912,6 +912,55 @@ async function cropImageByBox(imageData, bbox){
 }
 
 /* ---------------- Gemini 분석 ---------------- */
+async function refineLowConfidenceProblem(card){
+  if(!card?.cropBase64) return card;
+  const prompt=`아래 이미지는 초등학생 오답 문제 한 개만 잘라낸 이미지입니다.
+첫 인식 결과의 신뢰도가 낮아서 재검증합니다. 이미지에 보이는 내용만 근거로 정확하게 다시 읽으세요.
+긴 국어/영어 지문은 요약하지 말고 passage에 원문을 그대로 옮기고, 질문은 questionText에 분리하세요.
+수학 수식은 mathLatex에 LaTeX로 적으세요.
+과학은 실험·관찰·표·그래프·회로도·그림을, 사회는 지도·연표·사료·사진·통계표·그래프를 빠뜨리지 말고 visualDescription에 핵심 수치·범례·배치를 설명하세요.
+domain, concept, sourceType, skill을 다시 판단하고, 학생 답에서 명확한 오개념이 드러날 때만 misconception을 적으세요.
+정답이 확실하지 않으면 correctAnswer는 빈 문자열로 두세요.
+순수 JSON만 반환하세요.
+{"passage":"","questionText":"","mathLatex":"","options":[],"studentAnswer":"","correctAnswer":"","confidence":90,"domain":"","concept":"","sourceType":"","skill":"","misconception":"","visualDescription":""}`;
+  try{
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        contents:[{parts:[{text:prompt},{inline_data:{mime_type:card.cropMimeType||'image/jpeg',data:card.cropBase64}}]}],
+        generationConfig:{maxOutputTokens:8192,temperature:0.2}
+      })
+    });
+    const json=await res.json();
+    if(json.error||!json.candidates?.[0]) return card;
+    let text=json.candidates[0].content.parts[0].text||'';
+    text=text.replace(/\`\`\`json/g,'').replace(/\`\`\`/g,'').trim();
+    const p=JSON.parse(text);
+    const prefer=(next,old)=>String(next??'').trim()?next:old;
+    return {
+      ...card,
+      passage:prefer(p.passage,card.passage),
+      questionText:prefer(p.questionText,card.questionText),
+      mathLatex:prefer(p.mathLatex,card.mathLatex),
+      options:Array.isArray(p.options)&&p.options.length?p.options:card.options,
+      studentAnswer:prefer(p.studentAnswer,card.studentAnswer),
+      correctAnswer:prefer(p.correctAnswer,card.correctAnswer),
+      confidence:Number.isFinite(Number(p.confidence))?Math.max(0,Math.min(100,Math.round(Number(p.confidence)))):card.confidence,
+      domain:prefer(p.domain,card.domain),
+      concept:prefer(p.concept,card.concept),
+      sourceType:prefer(p.sourceType,card.sourceType),
+      skill:prefer(p.skill,card.skill),
+      misconception:prefer(p.misconception,card.misconception),
+      visualDescription:prefer(p.visualDescription,card.visualDescription),
+      refined:true
+    };
+  }catch(e){
+    console.warn('2차 정밀 인식 실패',e);
+    return card;
+  }
+}
+
 window.runAnalyze = async function(){
   const btn = document.getElementById('analyzeBtn');
   btn.disabled = true;
@@ -978,6 +1027,16 @@ visualDescription에는 그림·지도·그래프·표·실험장치처럼 문�
         reason: reasons[0] || ''
       };
     }));
+    const lowConfidenceIndexes=problemCards
+      .map((p,i)=>({i,confidence:Number(p.confidence)}))
+      .filter(x=>Number.isFinite(x.confidence)&&x.confidence<82&&problemCards[x.i].cropBase64)
+      .slice(0,2)
+      .map(x=>x.i);
+    if(lowConfidenceIndexes.length){
+      btn.innerHTML='<span class="spinner"></span>낮은 신뢰도 문제 정밀 확인 중...';
+      const refined=await Promise.all(lowConfidenceIndexes.map(i=>refineLowConfidenceProblem(problemCards[i])));
+      lowConfidenceIndexes.forEach((idx,j)=>{ problemCards[idx]=refined[j]; });
+    }
     renderProblemCards();
     document.getElementById('formArea').style.display = 'block';
     showToast(`문제 ${problemCards.length}개 인식 완료! 내용을 확인하고 수정해주세요`);
@@ -1327,12 +1386,14 @@ window.runAiAnalysis = async function(){
       return;
     }
 
-    const bySubject = {}, byUnit = {}, byReason = {};
+    const bySubject = {}, byUnit = {}, byReason = {}, byConcept = {}, bySkill = {};
     const byDifficulty = { '하':{c:0,t:0}, '중':{c:0,t:0}, '상':{c:0,t:0} };
     let retriedTotal = 0, retriedCorrectCount = 0;
     subset.forEach(e => {
       const s = e.subject || '기타'; bySubject[s] = (bySubject[s]||0)+1;
       if (e.unit) byUnit[e.unit] = (byUnit[e.unit]||0)+1;
+      if (e.concept) byConcept[e.concept] = (byConcept[e.concept]||0)+1;
+      if (e.skill) bySkill[e.skill] = (bySkill[e.skill]||0)+1;
       const r = e.reason || '기타'; byReason[r] = (byReason[r]||0)+1;
       if (e.retried){
         retriedTotal++;
@@ -1346,6 +1407,8 @@ window.runAiAnalysis = async function(){
     const topSubject = top(bySubject);
     const topUnit = Object.keys(byUnit).length ? top(byUnit) : null;
     const topReason = top(byReason);
+    const topConcept = Object.keys(byConcept).length ? top(byConcept) : null;
+    const topSkill = Object.keys(bySkill).length ? top(bySkill) : null;
     const reviewRate = retriedTotal ? Math.round(retriedCorrectCount/retriedTotal*100) : null;
     const diffSummary = DIFFICULTIES.map(d => {
       const v = byDifficulty[d];
@@ -1356,6 +1419,8 @@ window.runAiAnalysis = async function(){
 가장 많이 틀린 과목: ${topSubject[0]} (${topSubject[1]}개)
 가장 약한 단원: ${topUnit ? topUnit[0]+' ('+topUnit[1]+'개)' : '단원 정보 부족'}
 가장 많은 오답 이유: ${topReason[0]} (${topReason[1]}개)
+가장 자주 틀린 핵심 개념: ${topConcept ? topConcept[0]+' ('+topConcept[1]+'개)' : '개념 정보 부족'}
+가장 약한 사고 기능: ${topSkill ? topSkill[0]+' ('+topSkill[1]+'개)' : '사고 기능 정보 부족'}
 난이도별 재도전 정답률: ${diffSummary}
 전체 복습 성공률: ${reviewRate!==null ? reviewRate+'%' : '재도전 데이터 부족'}`;
 
