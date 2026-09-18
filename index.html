@@ -452,8 +452,9 @@
       <div class="card">
         <div class="section-title" style="margin:0 0 8px;">💾 무료 용량 최적화</div>
         <div class="entry-ans" style="line-height:1.8;">
-          문제 사진은 AI 인식과 자동 크롭에만 임시로 사용하고 클라우드에는 저장하지 않아요.<br/>
-          과학·사회 그림/지도/그래프는 AI가 <b>시각 자료 설명</b>으로 텍스트화해 남깁니다.<br/>
+          문제 사진은 기본적으로 저장하지 않고, <b>PDF 재출제에 꼭 필요한 문제만 선택 저장</b>합니다.<br/>
+          과학·사회 시각자료 문제, AI 인식 신뢰도 82% 미만 문제는 자동 보존 대상으로 표시되며 사용자가 직접 변경할 수 있어요.<br/>
+          저장 이미지는 문제 영역만 추가 압축해 Cloud Storage에 보관합니다. (Cloud Storage 사용에는 Firebase Blaze 연결이 필요합니다.)<br/>
           오답 데이터는 같은 날짜의 문제를 한 문서에 묶고 브라우저 캐시를 사용해 Firestore 읽기/쓰기를 줄입니다.
         </div>
         <button class="btn btn-ghost" style="margin-top:12px;" onclick="forceCloudSync()">🔄 지금 클라우드 동기화</button>
@@ -528,12 +529,14 @@ import {
   collection, addDoc, getDocs, getDocsFromCache, doc, getDoc, setDoc, updateDoc,
   query, orderBy, serverTimestamp, increment, FieldPath, deleteField, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
 
 const app = initializeApp(firebaseConfig);
 // 피트니스 다이어리/가족 스케줄러와 같은 방식: 브라우저 IndexedDB 영구 캐시
 const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
 });
+const storage = getStorage(app);
 
 const DEFAULT_REASONS = ["계산실수", "개념이해 부족", "문제를 끝까지 읽지 않음", "단위 실수", "공식 암기 부족", "시간 부족", "부주의", "찍음", "응용력 부족", "집중력 부족", "기타"];
 const GRADES = ["초1","초2","초3","초4","초5","초6"];
@@ -911,6 +914,37 @@ async function cropImageByBox(imageData, bbox){
   });
 }
 
+function shouldAutoKeepImage(p){
+  const visualTypes=/실험|관찰|그래프|표|회로|그림|지도|연표|사료|사진|통계/i;
+  const visualSubject=(p?.subject==='과학'||p?.subject==='사회') && visualTypes.test(String(p?.sourceType||'')+' '+String(p?.visualDescription||''));
+  const lowConfidence=Number.isFinite(Number(p?.confidence)) && Number(p.confidence)<82;
+  return !!(visualSubject || lowConfidence);
+}
+function imageKeepReason(p){
+  if(Number.isFinite(Number(p?.confidence)) && Number(p.confidence)<82) return '낮은 인식 신뢰도';
+  if((p?.subject==='과학'||p?.subject==='사회') && String(p?.sourceType||p?.visualDescription||'').trim()) return '과학·사회 시각자료';
+  return '사용자 선택';
+}
+async function prepareStoredCrop(crop){
+  if(!crop?.base64) return null;
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>{
+      let w=img.width,h=img.height;
+      const maxDim=1200;
+      if(w>h && w>maxDim){h=Math.round(h*maxDim/w);w=maxDim;}
+      else if(h>maxDim){w=Math.round(w*maxDim/h);h=maxDim;}
+      const canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      const dataUrl=canvas.toDataURL('image/jpeg',0.72);
+      resolve({base64:dataUrl.split(',')[1],mimeType:'image/jpeg'});
+    };
+    img.onerror=()=>resolve(crop);
+    img.src='data:'+(crop.mimeType||'image/jpeg')+';base64,'+crop.base64;
+  });
+}
+
 /* ---------------- Gemini 분석 ---------------- */
 async function refineLowConfidenceProblem(card){
   if(!card?.cropBase64) return card;
@@ -1024,6 +1058,12 @@ visualDescription에는 그림·지도·그래프·표·실험장치처럼 문�
         bbox,
         cropBase64: crop?.base64 || null,
         cropMimeType: crop?.mimeType || null,
+        keepImage: shouldAutoKeepImage({
+          subject:p.subject, sourceType:p.sourceType, visualDescription:p.visualDescription, confidence:p.confidence
+        }),
+        keepImageReason: imageKeepReason({
+          subject:p.subject, sourceType:p.sourceType, visualDescription:p.visualDescription, confidence:p.confidence
+        }),
         reason: reasons[0] || ''
       };
     }));
@@ -1462,6 +1502,7 @@ function renderProblemCards(){
         <button class="icon-btn" onclick="removeProblemCard(${i})">🗑 삭제</button>
       </div>
       ${p.cropBase64 ? `<img src="data:${p.cropMimeType||'image/jpeg'};base64,${p.cropBase64}" alt="문제 자동 크롭" style="width:100%;max-height:340px;object-fit:contain;border-radius:12px;background:var(--bg);margin-bottom:10px;" />` : ''}
+      ${p.cropBase64 ? `<label class="toggle-chip" style="margin-bottom:10px;"><input type="checkbox" ${p.keepImage?'checked':''} onchange="updateCardField(${i},'keepImage',this.checked); if(this.checked&&!problemCards[${i}].keepImageReason) problemCards[${i}].keepImageReason='사용자 선택';" /> 🖼 PDF용 원본 이미지 보존 <span style="font-size:11px;color:var(--text-sub);">(${escapeHtml(p.keepImageReason||'사용자 선택')})</span></label>` : ''}
       <label class="field-label">과목</label>
       <select onchange="updateCardField(${i},'subject',this.value)">${subjectOptions}</select>
 
@@ -1578,7 +1619,7 @@ window.confirmNewReasonForCard = async function(idx){
 };
 
 window.addBlankProblemCard = function(){
-  problemCards.push({ subject:'기타', domain:'', unit:'', concept:'', sourceType:'', skill:'', misconception:'', visualDescription:'', difficulty:'중', questionType:'단답형', passage:'', options:[], questionText:'', mathLatex:'', studentAnswer:'', correctAnswer:'', confidence:100, reason: reasons[0] || '' });
+  problemCards.push({ subject:'기타', domain:'', unit:'', concept:'', sourceType:'', skill:'', misconception:'', visualDescription:'', difficulty:'중', questionType:'단답형', passage:'', options:[], questionText:'', mathLatex:'', studentAnswer:'', correctAnswer:'', confidence:100, keepImage:false, keepImageReason:'사용자 선택', reason: reasons[0] || '' });
   renderProblemCards();
 };
 
