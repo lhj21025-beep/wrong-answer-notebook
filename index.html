@@ -11,6 +11,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <style>
   :root{
     --bg:#F5F5FB;
@@ -90,7 +92,7 @@
 
   .problem-card{background:var(--surface); border-radius:16px; padding:16px; margin-bottom:14px; box-shadow:var(--shadow); border:1.5px solid var(--border);}
   .problem-card-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
-  .problem-card-header .num-tag{font-size:12px; font-weight:800; color:var(--primary); background:var(--primary-soft); padding:4px 12px; border-radius:20px;}
+  .problem-card-header .num-tag{font-size:12px; font-weight:800; color:var(--primary); background:var(--primary-soft); padding:4px 12px; border-radius:20px;}\n  .math-box{margin:8px 0; padding:12px 14px; border-radius:12px; background:var(--bg); overflow-x:auto; font-size:17px;}\n  .confidence-note{font-size:11.5px; margin-top:7px; font-weight:700;}\n  .confidence-high{color:var(--success);}\n  .confidence-mid{color:#C48800;}\n  .confidence-low{color:var(--danger);}\n  .passage-box.expanded-passage{max-height:none;}
 
   .spinner{width:16px; height:16px; border:2.5px solid rgba(255,255,255,.4); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; display:inline-block; vertical-align:-3px; margin-right:6px;}
   @keyframes spin{to{transform:rotate(360deg);}}
@@ -132,7 +134,7 @@
   .entry-q{font-size:14.5px; font-weight:700; line-height:1.4; margin:8px 0 6px;}
   .entry-meta{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;}
   .entry-ans{font-size:12.5px; color:var(--text-sub); line-height:1.7;}
-  .passage-box{background:var(--bg); border-left:3px solid var(--primary-soft); border-radius:8px; padding:10px 12px; font-size:12.5px; line-height:1.7; color:var(--text-sub); white-space:pre-wrap; margin-bottom:8px; cursor:pointer; max-height:120px; overflow-y:auto;}
+  .passage-box{background:var(--bg); border-left:3px solid var(--primary-soft); border-radius:8px; padding:10px 12px; font-size:12.5px; line-height:1.7; color:var(--text-sub); white-space:pre-wrap; margin-bottom:8px; cursor:pointer; max-height:220px; overflow-y:auto;}
   .entry-ans b{color:var(--text); font-weight:700;}
   .entry-actions{display:flex; gap:6px; margin-top:12px;}
   .icon-btn{border:none; background:var(--bg); border-radius:10px; padding:8px 10px; font-size:12px; font-weight:700; color:var(--text-sub); cursor:pointer; display:flex; align-items:center; gap:4px;}
@@ -448,6 +450,16 @@
         <label class="toggle-chip"><input type="checkbox" id="s_darkMode" onchange="toggleDarkMode(this.checked)" /> 🌙 다크 모드</label>
       </div>
       <div class="card">
+        <div class="section-title" style="margin:0 0 8px;">💾 무료 용량 최적화</div>
+        <div class="entry-ans" style="line-height:1.8;">
+          문제 사진은 기본적으로 저장하지 않고, <b>PDF 재출제에 꼭 필요한 문제만 선택 저장</b>합니다.<br/>
+          과학·사회 시각자료 문제, AI 인식 신뢰도 82% 미만 문제는 자동 보존 대상으로 표시되며 사용자가 직접 변경할 수 있어요.<br/>
+          저장 이미지는 문제 영역만 추가 압축해 Cloud Storage에 보관합니다. (Cloud Storage 사용에는 Firebase Blaze 연결이 필요합니다.)<br/>
+          오답 데이터는 같은 날짜의 문제를 한 문서에 묶고 브라우저 캐시를 사용해 Firestore 읽기/쓰기를 줄입니다.
+        </div>
+        <button class="btn btn-ghost" style="margin-top:12px;" onclick="forceCloudSync()">🔄 지금 클라우드 동기화</button>
+      </div>
+      <div class="card">
         <label class="field-label">📥 데이터 내보내기</label>
         <div class="entry-ans" style="margin-bottom:10px;">전체 오답 데이터를 엑셀에서 열 수 있는 CSV 파일로 내려받아요.</div>
         <button class="btn btn-ghost" onclick="exportCSV()">CSV로 내보내기</button>
@@ -513,11 +525,18 @@ const GEMINI_MODEL = "gemini-3.6-flash";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
-  getFirestore, collection, addDoc, getDocs, doc, getDoc, setDoc, updateDoc, deleteDoc, query, orderBy, serverTimestamp, increment
+  initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
+  collection, addDoc, getDocs, getDocsFromCache, doc, getDoc, setDoc, updateDoc,
+  query, orderBy, serverTimestamp, increment, FieldPath, deleteField, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { getStorage, ref as storageRef, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// 피트니스 다이어리/가족 스케줄러와 같은 방식: 브라우저 IndexedDB 영구 캐시
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
+const storage = getStorage(app);
 
 const DEFAULT_REASONS = ["계산실수", "개념이해 부족", "문제를 끝까지 읽지 않음", "단위 실수", "공식 암기 부족", "시간 부족", "부주의", "찍음", "응용력 부족", "집중력 부족", "기타"];
 const GRADES = ["초1","초2","초3","초4","초5","초6"];
@@ -536,6 +555,53 @@ let problemCards = [];
 let settings = { defaultGrade: '초4', defaultSemester: '1학기', lastGradeBumpYear: null, monthlyGoal: 100 };
 const MAX_PROBLEMS = 5;
 let monthlyReviewCount = 0;
+
+const ENTRY_SERVER_SYNC_TTL = 30 * 60 * 1000; // 30분
+const ENTRY_SYNC_KEY = 'oedapnote_entries_last_server_sync';
+const ENTRY_DAYS_MIGRATION_KEY = 'oedapnote_entrydays_migrated_v1';
+
+function entryFieldKey(id){ return String(id).replace(/[^A-Za-z0-9_]/g, '_'); }
+function newEntryId(){ return (crypto.randomUUID ? crypto.randomUUID().replaceAll('-','') : 'e'+Date.now()+Math.random().toString(36).slice(2)); }
+function entryTimestampMs(e){
+  if (Number.isFinite(Number(e?.createdAtMs))) return Number(e.createdAtMs);
+  if (e?.createdAt?.toDate) return e.createdAt.toDate().getTime();
+  return 0;
+}
+function shouldSyncEntriesFromServer(){
+  const last = Number(localStorage.getItem(ENTRY_SYNC_KEY) || 0);
+  return !last || (Date.now() - last > ENTRY_SERVER_SYNC_TTL);
+}
+function flattenEntryDays(snap){
+  const out=[];
+  snap.docs.forEach(d=>{
+    const data=d.data()||{};
+    Object.values(data.entries||{}).forEach(raw=>{
+      if(!raw || !raw.id) return;
+      out.push({...raw, dayDocId:d.id});
+    });
+  });
+  out.sort((a,b)=>entryTimestampMs(b)-entryTimestampMs(a));
+  return out;
+}
+async function writeEntryDayItems(date, items){
+  const map={};
+  items.forEach(e=>{ map[entryFieldKey(e.id)] = e; });
+  await setDoc(doc(db,'entryDays',date), { date, entries:map }, { merge:true });
+}
+async function updateEntryFields(id, patch){
+  const e=entries.find(x=>x.id===id);
+  if(!e) throw new Error('오답 데이터를 찾지 못했습니다.');
+  const next={...e,...patch};
+  delete next.dayDocId;
+  await updateDoc(doc(db,'entryDays',e.date), new FieldPath('entries',entryFieldKey(id)), next);
+  Object.assign(e,patch);
+}
+async function deleteEntryFromDay(id){
+  const e=entries.find(x=>x.id===id);
+  if(!e) return;
+  await updateDoc(doc(db,'entryDays',e.date), new FieldPath('entries',entryFieldKey(id)), deleteField());
+}
+
 
 /* ---------------- 초기 로딩 ---------------- */
 async function init(){
@@ -566,15 +632,22 @@ function fillGradeSelects(){
 function currentMonthKey(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
 
 async function loadMonthlyStats(){
-  try {
-    const snap = await getDoc(doc(db, "monthlyStats", currentMonthKey()));
-    monthlyReviewCount = snap.exists() ? (snap.data().reviewCount || 0) : 0;
-  } catch(e){ console.error(e); monthlyReviewCount = 0; }
+  // 별도 monthlyStats 문서를 읽지 않습니다.
+  // entryDays 로딩 후 각 오답의 reviewCounts를 합산해 계산합니다.
+  monthlyReviewCount = 0;
+}
+
+function recomputeMonthlyReviewCount(){
+  const key=currentMonthKey();
+  monthlyReviewCount=entries.reduce((sum,e)=>{
+    const saved=Number(e.reviewCounts?.[key]||0);
+    if(saved) return sum+saved;
+    return sum + ((e.lastReviewedAt||'').startsWith(key) ? 1 : 0);
+  },0);
 }
 
 function bumpMonthlyReviewCount(){
   monthlyReviewCount++;
-  setDoc(doc(db, "monthlyStats", currentMonthKey()), { reviewCount: increment(1) }, { merge: true }).catch(e => console.error(e));
 }
 
 async function loadSettings(){
@@ -599,9 +672,9 @@ window.toggleDarkMode = function(checked){
 
 window.exportCSV = function(){
   if (entries.length === 0){ showToast('내보낼 데이터가 없어요'); return; }
-  const headers = ['날짜','학년','학기','과목','단원','난이도','문제유형','지문','문제','보기','학생답','정답','오답사유','즐겨찾기','졸업여부','연속정답','다음복습일'];
+  const headers = ['날짜','학년','학기','과목','영역','단원','핵심개념','자료유형','사고기능','오개념','시각자료설명','난이도','문제유형','지문','문제','보기','학생답','정답','오답사유','즐겨찾기','졸업여부','연속정답','다음복습일'];
   const rows = entries.map(e => [
-    e.date||'', e.grade||'', e.semester||'', e.subject||'', e.unit||'', e.difficulty||'', e.questionType||'단답형',
+    e.date||'', e.grade||'', e.semester||'', e.subject||'', e.domain||'', e.unit||'', e.concept||'', e.sourceType||'', e.skill||'', e.misconception||'', e.visualDescription||'', e.difficulty||'', e.questionType||'단답형',
     e.passage||'', e.questionText||'', (Array.isArray(e.options)?e.options.join(' / '):''), e.studentAnswer||'', e.correctAnswer||'',
     e.reason||'', e.starred ? 'Y' : 'N', e.graduated ? 'Y' : 'N', e.consecutiveCorrect||0, e.nextReviewDate||''
   ]);
@@ -652,30 +725,107 @@ function checkMarchGradeBump(){
 }
 
 async function loadReasons(){
-  try {
-    const snap = await getDocs(collection(db, "reasons"));
-    reasons = snap.docs.map(d => d.data().name);
-    if (reasons.length === 0){
-      for (const r of DEFAULT_REASONS) await addDoc(collection(db, "reasons"), { name: r });
-      reasons = [...DEFAULT_REASONS];
-    } else {
-      // 기존 사용자: 새로 추가된 기본 오답사유 중 없는 것만 추가 (기존 커스텀 이유는 그대로 유지)
-      const missing = DEFAULT_REASONS.filter(r => !reasons.includes(r));
-      for (const r of missing) await addDoc(collection(db, "reasons"), { name: r });
-      reasons = reasons.concat(missing);
+  const CUSTOM_REASON_DOC='customReasons';
+  const LEGACY_REASON_MIGRATION_KEY='oedapnote_reasons_migrated_v2';
+  try{
+    const snap=await getDoc(doc(db,'settings',CUSTOM_REASON_DOC));
+    let custom=Array.isArray(snap.data()?.items) ? snap.data().items.filter(Boolean) : [];
+    if(!localStorage.getItem(LEGACY_REASON_MIGRATION_KEY)){
+      try{
+        const legacy=await getDocs(collection(db,'reasons'));
+        const legacyNames=legacy.docs.map(d=>d.data().name).filter(Boolean);
+        const migrated=legacyNames.filter(r=>!DEFAULT_REASONS.includes(r));
+        custom=[...new Set([...custom,...migrated])];
+        if(migrated.length || !snap.exists()) await setDoc(doc(db,'settings',CUSTOM_REASON_DOC),{items:custom},{merge:true});
+      }catch(e){ console.debug('legacy reasons migration skipped',e); }
+      localStorage.setItem(LEGACY_REASON_MIGRATION_KEY,'1');
     }
-  } catch(e){ reasons = [...DEFAULT_REASONS]; console.error(e); }
+    reasons=[...DEFAULT_REASONS,...custom.filter(r=>!DEFAULT_REASONS.includes(r))];
+  }catch(e){
+    reasons=[...DEFAULT_REASONS];
+    console.error(e);
+  }
+  fillReasonSelects();
+}
+async function saveCustomReason(name){
+  const val=String(name||'').trim();
+  if(!val || reasons.includes(val)) return;
+  reasons.push(val);
+  const custom=reasons.filter(r=>!DEFAULT_REASONS.includes(r));
+  await setDoc(doc(db,'settings','customReasons'),{items:custom},{merge:true});
   fillReasonSelects();
 }
 
-async function loadEntries(){
-  try {
-    const q = query(collection(db, "entries"), orderBy("createdAt", "desc"));
-    const snap = await getDocs(q);
-    entries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch(e){ console.error(e); entries = []; }
+async function migrateLegacyEntries(){
+  const legacyQ=query(collection(db,'entries'),orderBy('createdAt','desc'));
+  const legacySnap=await getDocs(legacyQ);
+  if(legacySnap.empty){
+    localStorage.setItem(ENTRY_DAYS_MIGRATION_KEY,'1');
+    return [];
+  }
+  const byDay=new Map();
+  legacySnap.docs.forEach(d=>{
+    const raw={id:d.id,...d.data()};
+    const date=raw.date||todayStr();
+    const item={...raw,createdAtMs:entryTimestampMs(raw)||Date.now()};
+    const map=byDay.get(date)||{};
+    map[entryFieldKey(item.id)]=item;
+    byDay.set(date,map);
+  });
+  const days=[...byDay.entries()];
+  for(let i=0;i<days.length;i+=400){
+    const batch=writeBatch(db);
+    days.slice(i,i+400).forEach(([date,map])=>{
+      batch.set(doc(db,'entryDays',date),{date,entries:map},{merge:true});
+    });
+    await batch.commit();
+  }
+  localStorage.setItem(ENTRY_DAYS_MIGRATION_KEY,'1');
+  return legacySnap.docs.map(d=>{
+    const raw={id:d.id,...d.data()};
+    return {...raw,createdAtMs:entryTimestampMs(raw)||Date.now(),dayDocId:raw.date||todayStr()};
+  }).sort((a,b)=>entryTimestampMs(b)-entryTimestampMs(a));
+}
+
+async function loadEntries(forceServer=false){
+  const q=query(collection(db,'entryDays'),orderBy('date','desc'));
+  let loadedFromCache=false;
+  try{
+    const cached=await getDocsFromCache(q);
+    if(!cached.empty){
+      entries=flattenEntryDays(cached);
+      loadedFromCache=true;
+    }
+  }catch(e){ console.debug('entryDays cache miss'); }
+
+  const needServer=forceServer || !loadedFromCache || shouldSyncEntriesFromServer();
+  if(needServer){
+    try{
+      const snap=await getDocs(q);
+      if(!snap.empty){
+        entries=flattenEntryDays(snap);
+        localStorage.setItem(ENTRY_DAYS_MIGRATION_KEY,'1');
+      }else if(!localStorage.getItem(ENTRY_DAYS_MIGRATION_KEY)){
+        entries=await migrateLegacyEntries();
+      }else{
+        entries=[];
+      }
+      localStorage.setItem(ENTRY_SYNC_KEY,String(Date.now()));
+    }catch(e){
+      console.error(e);
+      if(!loadedFromCache) entries=[];
+    }
+  }
+  recomputeMonthlyReviewCount();
   fillFilterOptions();
 }
+
+window.forceCloudSync=async function(){
+  localStorage.removeItem(ENTRY_SYNC_KEY);
+  await loadEntries(true);
+  renderHome(); renderList(); renderStats();
+  showToast('클라우드와 동기화했어요 ✓');
+};
 
 function fillReasonSelects(){
   const filterReason = document.getElementById('filterReason');
@@ -704,7 +854,8 @@ window.goToDueReview = function(){
 async function handleFileSelected(e){
   const file = e.target.files[0];
   if (!file) return;
-  const compressed = await compressImage(file, 1024, 0.75);
+  // 분수·작은 글씨·긴 지문의 인식 정확도를 위해 고해상도를 유지합니다.
+  const compressed = await compressImage(file, 2200, 0.90);
   currentImage = compressed;
   document.getElementById('previewImg').src = 'data:' + compressed.mimeType + ';base64,' + compressed.base64;
   document.getElementById('previewImg').style.display = 'block';
@@ -738,7 +889,112 @@ function compressImage(file, maxDim, quality){
   });
 }
 
+async function cropImageByBox(imageData, bbox){
+  if (!imageData?.base64 || !Array.isArray(bbox) || bbox.length !== 4) return null;
+  const vals = bbox.map(Number);
+  if (vals.some(v => !Number.isFinite(v))) return null;
+  const [x, y, w, h] = vals;
+  if (w <= 0 || h <= 0) return null;
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const pad = 18;
+      const nx = Math.max(0, x-pad), ny = Math.max(0, y-pad);
+      const nw = Math.min(1000-nx, w+pad*2), nh = Math.min(1000-ny, h+pad*2);
+      const sx = Math.round(nx/1000*img.width), sy = Math.round(ny/1000*img.height);
+      const sw = Math.max(1, Math.round(nw/1000*img.width)), sh = Math.max(1, Math.round(nh/1000*img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = sw; canvas.height = sh;
+      canvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+      resolve({ base64:dataUrl.split(',')[1], mimeType:'image/jpeg' });
+    };
+    img.onerror = () => resolve(null);
+    img.src = 'data:' + imageData.mimeType + ';base64,' + imageData.base64;
+  });
+}
+
+function shouldAutoKeepImage(p){
+  const visualTypes=/실험|관찰|그래프|표|회로|그림|지도|연표|사료|사진|통계/i;
+  const visualSubject=(p?.subject==='과학'||p?.subject==='사회') && visualTypes.test(String(p?.sourceType||'')+' '+String(p?.visualDescription||''));
+  const lowConfidence=Number.isFinite(Number(p?.confidence)) && Number(p.confidence)<82;
+  return !!(visualSubject || lowConfidence);
+}
+function imageKeepReason(p){
+  if(Number.isFinite(Number(p?.confidence)) && Number(p.confidence)<82) return '낮은 인식 신뢰도';
+  if((p?.subject==='과학'||p?.subject==='사회') && String(p?.sourceType||p?.visualDescription||'').trim()) return '과학·사회 시각자료';
+  return '사용자 선택';
+}
+async function prepareStoredCrop(crop){
+  if(!crop?.base64) return null;
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>{
+      let w=img.width,h=img.height;
+      const maxDim=1200;
+      if(w>h && w>maxDim){h=Math.round(h*maxDim/w);w=maxDim;}
+      else if(h>maxDim){w=Math.round(w*maxDim/h);h=maxDim;}
+      const canvas=document.createElement('canvas');
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      const dataUrl=canvas.toDataURL('image/jpeg',0.72);
+      resolve({base64:dataUrl.split(',')[1],mimeType:'image/jpeg'});
+    };
+    img.onerror=()=>resolve(crop);
+    img.src='data:'+(crop.mimeType||'image/jpeg')+';base64,'+crop.base64;
+  });
+}
+
 /* ---------------- Gemini 분석 ---------------- */
+async function refineLowConfidenceProblem(card){
+  if(!card?.cropBase64) return card;
+  const prompt=`아래 이미지는 초등학생 오답 문제 한 개만 잘라낸 이미지입니다.
+첫 인식 결과의 신뢰도가 낮아서 재검증합니다. 이미지에 보이는 내용만 근거로 정확하게 다시 읽으세요.
+긴 국어/영어 지문은 요약하지 말고 passage에 원문을 그대로 옮기고, 질문은 questionText에 분리하세요.
+수학 수식은 mathLatex에 LaTeX로 적으세요.
+과학은 실험·관찰·표·그래프·회로도·그림을, 사회는 지도·연표·사료·사진·통계표·그래프를 빠뜨리지 말고 visualDescription에 핵심 수치·범례·배치를 설명하세요.
+domain, concept, sourceType, skill을 다시 판단하고, 학생 답에서 명확한 오개념이 드러날 때만 misconception을 적으세요.
+정답이 확실하지 않으면 correctAnswer는 빈 문자열로 두세요.
+순수 JSON만 반환하세요.
+{"passage":"","questionText":"","mathLatex":"","options":[],"studentAnswer":"","correctAnswer":"","confidence":90,"domain":"","concept":"","sourceType":"","skill":"","misconception":"","visualDescription":""}`;
+  try{
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        contents:[{parts:[{text:prompt},{inline_data:{mime_type:card.cropMimeType||'image/jpeg',data:card.cropBase64}}]}],
+        generationConfig:{maxOutputTokens:8192,temperature:0.2}
+      })
+    });
+    const json=await res.json();
+    if(json.error||!json.candidates?.[0]) return card;
+    let text=json.candidates[0].content.parts[0].text||'';
+    text=text.replace(/\`\`\`json/g,'').replace(/\`\`\`/g,'').trim();
+    const p=JSON.parse(text);
+    const prefer=(next,old)=>String(next??'').trim()?next:old;
+    return {
+      ...card,
+      passage:prefer(p.passage,card.passage),
+      questionText:prefer(p.questionText,card.questionText),
+      mathLatex:prefer(p.mathLatex,card.mathLatex),
+      options:Array.isArray(p.options)&&p.options.length?p.options:card.options,
+      studentAnswer:prefer(p.studentAnswer,card.studentAnswer),
+      correctAnswer:prefer(p.correctAnswer,card.correctAnswer),
+      confidence:Number.isFinite(Number(p.confidence))?Math.max(0,Math.min(100,Math.round(Number(p.confidence)))):card.confidence,
+      domain:prefer(p.domain,card.domain),
+      concept:prefer(p.concept,card.concept),
+      sourceType:prefer(p.sourceType,card.sourceType),
+      skill:prefer(p.skill,card.skill),
+      misconception:prefer(p.misconception,card.misconception),
+      visualDescription:prefer(p.visualDescription,card.visualDescription),
+      refined:true
+    };
+  }catch(e){
+    console.warn('2차 정밀 인식 실패',e);
+    return card;
+  }
+}
+
 window.runAnalyze = async function(){
   const btn = document.getElementById('analyzeBtn');
   btn.disabled = true;
@@ -748,8 +1004,12 @@ window.runAnalyze = async function(){
 이미지에서 찾을 수 있는 "틀린" 문제만 최대 ${MAX_PROBLEMS}개까지 찾아 각각 아래 형식으로 정리해서, 순수 JSON 객체 하나로만 응답하세요. 다른 설명이나 코드블록 없이 JSON만 반환하세요. 맞은 문제는 포함하지 마세요. 오답이 1개뿐이면 배열에 1개만 넣으세요.
 questionType은 "단답형"(한 단어/숫자로 답하는 문제), "객관식"(①②③④ 같은 보기 중에서 고르는 문제), "서술형"(문장으로 풀어 설명하는 문제) 중 하나로 판단하세요.
 객관식인 경우 options 배열에 보기를 각각의 항목으로 순서대로 모두 담고(예: "① 15", "② 20"...), correctAnswer와 studentAnswer는 정답/학생이 고른 보기의 번호만 적으세요(예: "3").
-국어 지문형 문제, 영어 지문형 문제처럼 읽기 지문(이야기글/설명문/대화문 등)이 딸린 문제는, 그 지문 전체를 절대 요약하지 말고 원문 그대로 passage 필드에 옮겨 적으세요(줄바꿈 포함해도 됩니다). questionText에는 지문 내용을 넣지 말고 실제로 묻는 질문 문장만 담으세요. 지문이 없는 문제는 passage를 빈 문자열로 두세요.
-{"problems":[{"subject":"국어/수학/영어/사회/과학 중 추정되는 과목(모르면 빈 문자열)","unit":"이 문제가 속한 단원 추정(예: 분수, 소수, 도형, 독해, 어휘, 문법 등. 모르면 빈 문자열)","difficulty":"하/중/상 중 추정 난이도","questionType":"단답형/객관식/서술형 중 하나","passage":"읽기 지문이 있으면 전체 원문 그대로, 없으면 빈 문자열","questionText":"실제로 묻는 질문 문장만","options":["객관식인 경우 보기 목록, 아니면 빈 배열"],"studentAnswer":"학생이 작성한 답(보이면 적고 안 보이면 빈 문자열)","correctAnswer":"정답(보이거나 유추 가능하면 적고 아니면 빈 문자열)"}]}`;
+국어 지문형 문제, 영어 지문형 문제처럼 읽기 지문(이야기글/설명문/대화문 등)이 딸린 문제는, 그 지문 전체를 절대 요약하지 말고 원문 그대로 passage 필드에 옮겨 적으세요(줄바꿈 포함해도 됩니다). questionText에는 지문 내용을 넣지 말고 실제로 묻는 질문 문장만 담으세요. 지문이 없는 문제는 passage를 빈 문자열로 두세요.\n수학 문제에 분수, 대분수, 소수, 괄호, 제곱, 비례식 등 수식이 있으면 원래 모양을 최대한 보존해서 questionText에 적고, 별도로 mathLatex 필드에는 LaTeX 수식으로 적으세요. 예: \\frac{3}{4}+\\frac{2}{5}. 수식이 없으면 mathLatex는 빈 문자열로 두세요.\nconfidence는 문제/지문/답을 이미지에서 얼마나 확실히 읽었는지 0~100 정수로 평가하세요. 흐리거나 잘렸거나 수식·도형 판독이 애매하면 낮게 주세요. 정답을 확실히 알 수 없으면 억지로 추측하지 말고 correctAnswer를 빈 문자열로 두세요.\nbbox는 해당 문제 전체(지문, 질문, 보기, 학생답 표시까지 포함)의 영역을 [x,y,width,height]로 적으세요. 값은 이미지 왼쪽 위 0,0에서 오른쪽 아래 1000,1000까지의 상대 좌표입니다.
+과학 문제는 실험·관찰·그래프·표·회로도·생물/지구과학 그림을 중요 자료로 보고, domain에는 생명/물질/운동과에너지/지구와우주 등 큰 영역, concept에는 핵심 개념, sourceType에는 실험/관찰/그래프/표/그림/회로도/일반지문 중 가장 적절한 유형, skill에는 개념이해/자료해석/원인추론/실험설계/계산/적용 중 핵심 사고 기능을 적으세요.
+사회 문제는 지도·연표·사료·사진·통계표·그래프 자료를 중요하게 보고, domain에는 지리/역사/정치/경제/사회문화 등 큰 영역, concept에는 핵심 개념, sourceType에는 지도/연표/사료/사진/통계표/그래프/일반지문 중 가장 적절한 유형, skill에는 개념이해/자료해석/비교/인과관계/시대판단/공간판단/적용 중 핵심 사고 기능을 적으세요.
+국어·수학·영어도 가능한 경우 domain, concept, skill을 채우세요. misconception에는 학생 답에서 드러나는 대표 오개념이나 잘못된 판단이 명확할 때만 한 문장으로 적고, 불명확하면 빈 문자열로 두세요.
+visualDescription에는 그림·지도·그래프·표·실험장치처럼 문제 해결에 필요한 시각 자료를 나중에 이미지 없이도 이해할 수 있게 핵심 정보와 수치/범례/축/배치를 구체적으로 텍스트로 설명하세요. 시각 자료가 없으면 빈 문자열로 두세요.
+{"problems":[{"subject":"국어/수학/영어/사회/과학 중 추정되는 과목(모르면 빈 문자열)","unit":"이 문제가 속한 단원 추정(예: 분수, 소수, 도형, 독해, 어휘, 문법 등. 모르면 빈 문자열)","difficulty":"하/중/상 중 추정 난이도","questionType":"단답형/객관식/서술형 중 하나","passage":"읽기 지문이 있으면 전체 원문 그대로, 없으면 빈 문자열","questionText":"실제로 묻는 질문 문장만","mathLatex":"수식이 있으면 LaTeX, 없으면 빈 문자열","options":["객관식인 경우 보기 목록, 아니면 빈 배열"],"studentAnswer":"학생이 작성한 답(보이면 적고 안 보이면 빈 문자열)","correctAnswer":"정답(확실한 경우만, 아니면 빈 문자열)","confidence":95,"bbox":[80,120,840,260],"domain":"큰 영역","concept":"핵심 개념","sourceType":"자료 유형","skill":"핵심 사고 기능","misconception":"명확한 오개념 또는 빈 문자열","visualDescription":"시각 자료 설명 또는 빈 문자열"}]}`;
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -774,18 +1034,49 @@ questionType은 "단답형"(한 단어/숫자로 답하는 문제), "객관식"(
     const list = Array.isArray(parsed.problems) ? parsed.problems.slice(0, MAX_PROBLEMS) : [];
     if (list.length === 0) throw new Error('오답을 찾지 못했어요. 아래 "문제 직접 추가"로 입력해주세요.');
 
-    problemCards = list.map(p => ({
-      subject: ['국어','수학','영어','사회','과학'].includes(p.subject) ? p.subject : '기타',
-      unit: p.unit || '',
-      difficulty: DIFFICULTIES.includes(p.difficulty) ? p.difficulty : '중',
-      questionType: ['단답형','객관식','서술형'].includes(p.questionType) ? p.questionType : '단답형',
-      passage: p.passage || '',
-      options: Array.isArray(p.options) ? p.options.filter(Boolean) : [],
-      questionText: p.questionText || '',
-      studentAnswer: p.studentAnswer || '',
-      correctAnswer: p.correctAnswer || '',
-      reason: reasons[0] || ''
+    problemCards = await Promise.all(list.map(async p => {
+      const bbox = Array.isArray(p.bbox) ? p.bbox.map(Number) : null;
+      const crop = await cropImageByBox(currentImage, bbox);
+      return {
+        subject: ['국어','수학','영어','사회','과학'].includes(p.subject) ? p.subject : '기타',
+        unit: p.unit || '',
+        difficulty: DIFFICULTIES.includes(p.difficulty) ? p.difficulty : '중',
+        questionType: ['단답형','객관식','서술형'].includes(p.questionType) ? p.questionType : '단답형',
+        passage: p.passage || '',
+        options: Array.isArray(p.options) ? p.options.filter(Boolean) : [],
+        questionText: p.questionText || '',
+        mathLatex: p.mathLatex || '',
+        studentAnswer: p.studentAnswer || '',
+        correctAnswer: p.correctAnswer || '',
+        confidence: Number.isFinite(Number(p.confidence)) ? Math.max(0, Math.min(100, Math.round(Number(p.confidence)))) : 70,
+        domain: p.domain || '',
+        concept: p.concept || '',
+        sourceType: p.sourceType || '',
+        skill: p.skill || '',
+        misconception: p.misconception || '',
+        visualDescription: p.visualDescription || '',
+        bbox,
+        cropBase64: crop?.base64 || null,
+        cropMimeType: crop?.mimeType || null,
+        keepImage: shouldAutoKeepImage({
+          subject:p.subject, sourceType:p.sourceType, visualDescription:p.visualDescription, confidence:p.confidence
+        }),
+        keepImageReason: imageKeepReason({
+          subject:p.subject, sourceType:p.sourceType, visualDescription:p.visualDescription, confidence:p.confidence
+        }),
+        reason: reasons[0] || ''
+      };
     }));
+    const lowConfidenceIndexes=problemCards
+      .map((p,i)=>({i,confidence:Number(p.confidence)}))
+      .filter(x=>Number.isFinite(x.confidence)&&x.confidence<82&&problemCards[x.i].cropBase64)
+      .slice(0,2)
+      .map(x=>x.i);
+    if(lowConfidenceIndexes.length){
+      btn.innerHTML='<span class="spinner"></span>낮은 신뢰도 문제 정밀 확인 중...';
+      const refined=await Promise.all(lowConfidenceIndexes.map(i=>refineLowConfidenceProblem(problemCards[i])));
+      lowConfidenceIndexes.forEach((idx,j)=>{ problemCards[idx]=refined[j]; });
+    }
     renderProblemCards();
     document.getElementById('formArea').style.display = 'block';
     showToast(`문제 ${problemCards.length}개 인식 완료! 내용을 확인하고 수정해주세요`);
@@ -1075,37 +1366,40 @@ window.saveSimilarProblem = async function(id){
   if (!orig || !sim) return;
   try {
     const practiceReason = '유사문제 연습';
-    if (!reasons.includes(practiceReason)){
-      await addDoc(collection(db, "reasons"), { name: practiceReason });
-      reasons.push(practiceReason);
-    }
-    await addDoc(collection(db, "entries"), {
-      date: todayStr(),
-      grade: orig.grade || settings.defaultGrade,
-      semester: orig.semester || settings.defaultSemester,
-      subject: orig.subject || '기타',
-      unit: orig.unit || '',
-      difficulty: orig.difficulty || '중',
-      questionType: orig.questionType || '단답형',
-      passage: sim.passage || '',
-      options: Array.isArray(sim.options) ? sim.options.filter(Boolean) : [],
-      questionText: sim.questionText || '',
-      studentAnswer: '',
-      correctAnswer: sim.correctAnswer || '',
-      reason: practiceReason,
-      retried: false,
-      retriedCorrect: null,
-      starred: false,
-      consecutiveCorrect: 0,
-      graduated: false,
-      reviewStage: 0,
-      nextReviewDate: todayStr(),
-      createdAt: serverTimestamp()
-    });
+    if (!reasons.includes(practiceReason)){ reasons.push(practiceReason); fillReasonSelects(); }
+    const date=todayStr();
+    const item={
+      id:newEntryId(),
+      date,
+      grade:orig.grade||settings.defaultGrade,
+      semester:orig.semester||settings.defaultSemester,
+      subject:orig.subject||'기타',
+      domain:orig.domain||'',
+      unit:orig.unit||'',
+      concept:orig.concept||'',
+      sourceType:orig.sourceType||'',
+      skill:orig.skill||'',
+      misconception:'',
+      visualDescription:sim.visualDescription||'',
+      difficulty:orig.difficulty||'중',
+      questionType:orig.questionType||'단답형',
+      passage:sim.passage||'',
+      options:Array.isArray(sim.options)?sim.options.filter(Boolean):[],
+      questionText:sim.questionText||'',
+      mathLatex:sim.mathLatex||'',
+      studentAnswer:'',
+      correctAnswer:sim.correctAnswer||'',
+      confidence:100,
+      reason:practiceReason,
+      retried:false,retriedCorrect:null,starred:false,consecutiveCorrect:0,graduated:false,
+      reviewStage:0,nextReviewDate:date,createdAtMs:Date.now(),reviewCounts:{}
+    };
+    await writeEntryDayItems(date,[item]);
+    entries=[{...item,dayDocId:date},...entries].sort((a,b)=>entryTimestampMs(b)-entryTimestampMs(a));
+    localStorage.setItem(ENTRY_SYNC_KEY,String(Date.now()));
     showToast('유사문제를 오답노트에 추가했어요 ✓');
     closeSimilar(id);
-    await loadEntries();
-    renderHome(); renderList(); renderStats();
+    fillFilterOptions(); renderHome(); renderList(); renderStats();
   } catch(err){
     console.error(err);
     showToast('저장 실패: ' + err.message, 5000);
@@ -1123,7 +1417,7 @@ window.runAiAnalysis = async function(){
     let subset;
     if (rangeVal === '30d'){
       const cutoff = Date.now() - 30*24*60*60*1000;
-      subset = entries.filter(e => e.createdAt && e.createdAt.toDate && e.createdAt.toDate().getTime() > cutoff);
+      subset = entries.filter(e => entryTimestampMs(e) > cutoff);
     } else {
       subset = entries.slice(0, parseInt(rangeVal)); // entries는 이미 최신순 정렬됨
     }
@@ -1132,12 +1426,14 @@ window.runAiAnalysis = async function(){
       return;
     }
 
-    const bySubject = {}, byUnit = {}, byReason = {};
+    const bySubject = {}, byUnit = {}, byReason = {}, byConcept = {}, bySkill = {};
     const byDifficulty = { '하':{c:0,t:0}, '중':{c:0,t:0}, '상':{c:0,t:0} };
     let retriedTotal = 0, retriedCorrectCount = 0;
     subset.forEach(e => {
       const s = e.subject || '기타'; bySubject[s] = (bySubject[s]||0)+1;
       if (e.unit) byUnit[e.unit] = (byUnit[e.unit]||0)+1;
+      if (e.concept) byConcept[e.concept] = (byConcept[e.concept]||0)+1;
+      if (e.skill) bySkill[e.skill] = (bySkill[e.skill]||0)+1;
       const r = e.reason || '기타'; byReason[r] = (byReason[r]||0)+1;
       if (e.retried){
         retriedTotal++;
@@ -1151,6 +1447,8 @@ window.runAiAnalysis = async function(){
     const topSubject = top(bySubject);
     const topUnit = Object.keys(byUnit).length ? top(byUnit) : null;
     const topReason = top(byReason);
+    const topConcept = Object.keys(byConcept).length ? top(byConcept) : null;
+    const topSkill = Object.keys(bySkill).length ? top(bySkill) : null;
     const reviewRate = retriedTotal ? Math.round(retriedCorrectCount/retriedTotal*100) : null;
     const diffSummary = DIFFICULTIES.map(d => {
       const v = byDifficulty[d];
@@ -1161,6 +1459,8 @@ window.runAiAnalysis = async function(){
 가장 많이 틀린 과목: ${topSubject[0]} (${topSubject[1]}개)
 가장 약한 단원: ${topUnit ? topUnit[0]+' ('+topUnit[1]+'개)' : '단원 정보 부족'}
 가장 많은 오답 이유: ${topReason[0]} (${topReason[1]}개)
+가장 자주 틀린 핵심 개념: ${topConcept ? topConcept[0]+' ('+topConcept[1]+'개)' : '개념 정보 부족'}
+가장 약한 사고 기능: ${topSkill ? topSkill[0]+' ('+topSkill[1]+'개)' : '사고 기능 정보 부족'}
 난이도별 재도전 정답률: ${diffSummary}
 전체 복습 성공률: ${reviewRate!==null ? reviewRate+'%' : '재도전 데이터 부족'}`;
 
@@ -1201,6 +1501,8 @@ function renderProblemCards(){
         <span class="num-tag">문제 ${i+1}</span>
         <button class="icon-btn" onclick="removeProblemCard(${i})">🗑 삭제</button>
       </div>
+      ${p.cropBase64 ? `<img src="data:${p.cropMimeType||'image/jpeg'};base64,${p.cropBase64}" alt="문제 자동 크롭" style="width:100%;max-height:340px;object-fit:contain;border-radius:12px;background:var(--bg);margin-bottom:10px;" />` : ''}
+      ${p.cropBase64 ? `<label class="toggle-chip" style="margin-bottom:10px;"><input type="checkbox" ${p.keepImage?'checked':''} onchange="updateCardField(${i},'keepImage',this.checked); if(this.checked&&!problemCards[${i}].keepImageReason) problemCards[${i}].keepImageReason='사용자 선택';" /> 🖼 PDF용 원본 이미지 보존 <span style="font-size:11px;color:var(--text-sub);">(${escapeHtml(p.keepImageReason||'사용자 선택')})</span></label>` : ''}
       <label class="field-label">과목</label>
       <select onchange="updateCardField(${i},'subject',this.value)">${subjectOptions}</select>
 
@@ -1215,11 +1517,43 @@ function renderProblemCards(){
         </div>
       </div>
 
+      <div class="btn-row">
+        <div style="flex:1;">
+          <label class="field-label">영역</label>
+          <input type="text" value="${escapeAttr(p.domain||'')}" oninput="updateCardField(${i},'domain',this.value)" placeholder="예: 지구와 우주 / 역사" />
+        </div>
+        <div style="flex:1;">
+          <label class="field-label">핵심 개념</label>
+          <input type="text" value="${escapeAttr(p.concept||'')}" oninput="updateCardField(${i},'concept',this.value)" placeholder="예: 증발과 응결" />
+        </div>
+      </div>
+      <div class="btn-row">
+        <div style="flex:1;">
+          <label class="field-label">자료 유형</label>
+          <input type="text" value="${escapeAttr(p.sourceType||'')}" oninput="updateCardField(${i},'sourceType',this.value)" placeholder="예: 실험 / 지도 / 연표 / 그래프" />
+        </div>
+        <div style="flex:1;">
+          <label class="field-label">사고 기능</label>
+          <input type="text" value="${escapeAttr(p.skill||'')}" oninput="updateCardField(${i},'skill',this.value)" placeholder="예: 자료해석 / 인과관계" />
+        </div>
+      </div>
+
+      <label class="field-label">AI가 추정한 오개념 (명확한 경우만)</label>
+      <input type="text" value="${escapeAttr(p.misconception||'')}" oninput="updateCardField(${i},'misconception',this.value)" placeholder="예: 온도가 높아야만 증발한다고 생각함" />
+
+      <label class="field-label">시각 자료 설명 (그림·지도·표·그래프·실험장치)</label>
+      <textarea oninput="updateCardField(${i},'visualDescription',this.value)" placeholder="이미지를 저장하지 않아도 복습할 수 있도록 핵심 배치·수치·범례를 기록합니다." style="min-height:72px;">${escapeHtml(p.visualDescription||'')}</textarea>
+
       <label class="field-label">지문 (있는 경우, 없으면 비워두세요)</label>
       <textarea oninput="updateCardField(${i},'passage',this.value)" placeholder="읽기 지문이 있는 문제만 여기에 원문 전체를 입력하세요" style="min-height:90px;">${escapeHtml(p.passage||'')}</textarea>
 
       <label class="field-label">문제 내용 (실제 질문)</label>
       <textarea oninput="updateCardField(${i},'questionText',this.value)" placeholder="문제 내용을 입력하세요">${escapeHtml(p.questionText)}</textarea>
+
+      <label class="field-label">수식 (LaTeX · 분수/계산식이 있는 경우)</label>
+      <input type="text" value="${escapeAttr(p.mathLatex||'')}" oninput="updateCardField(${i},'mathLatex',this.value); updateMathPreview(${i},this.value)" placeholder="예: \\frac{3}{4}+\\frac{2}{5}" />
+      <div class="math-box" id="mathPreview-${i}" style="${p.mathLatex ? '' : 'display:none;'}">${p.mathLatex ? renderMath(p.mathLatex) : ''}</div>
+      <div class="confidence-note ${confidenceClass(p.confidence)}">AI 인식 신뢰도: ${Number.isFinite(Number(p.confidence)) ? Math.round(Number(p.confidence)) : 70}%${Number(p.confidence) < 80 ? ' · 원문을 한 번 확인해주세요' : ''}</div>
 
       <label class="field-label">문제 유형</label>
       <select onchange="updateCardField(${i},'questionType',this.value); renderProblemCards();">
@@ -1255,6 +1589,14 @@ window.updateCardField = function(idx, field, value){
   if (problemCards[idx]) problemCards[idx][field] = value;
 };
 
+window.updateMathPreview = function(idx, latex){
+  const el = document.getElementById('mathPreview-' + idx);
+  if (!el) return;
+  if (!String(latex || '').trim()){ el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'block';
+  el.innerHTML = renderMath(latex);
+};
+
 window.updateCardOptions = function(idx, text){
   if (problemCards[idx]) problemCards[idx].options = text.split('\n').map(s => s.trim()).filter(Boolean);
 };
@@ -1271,17 +1613,13 @@ window.confirmNewReasonForCard = async function(idx){
   const input = document.getElementById('newReasonInput-' + idx);
   const val = input.value.trim();
   if (!val) return;
-  if (!reasons.includes(val)){
-    await addDoc(collection(db, "reasons"), { name: val });
-    reasons.push(val);
-    fillReasonSelects();
-  }
+  if (!reasons.includes(val)) await saveCustomReason(val);
   problemCards[idx].reason = val;
   renderProblemCards();
 };
 
 window.addBlankProblemCard = function(){
-  problemCards.push({ subject:'기타', unit:'', difficulty:'중', questionType:'단답형', passage:'', options:[], questionText:'', studentAnswer:'', correctAnswer:'', reason: reasons[0] || '' });
+  problemCards.push({ subject:'기타', domain:'', unit:'', concept:'', sourceType:'', skill:'', misconception:'', visualDescription:'', difficulty:'중', questionType:'단답형', passage:'', options:[], questionText:'', mathLatex:'', studentAnswer:'', correctAnswer:'', confidence:100, keepImage:false, keepImageReason:'사용자 선택', reason: reasons[0] || '' });
   renderProblemCards();
 };
 
@@ -1299,32 +1637,48 @@ window.saveAllEntries = async function(){
   const btn = document.getElementById('saveBtn');
   btn.disabled = true; btn.textContent = '저장 중...';
   try {
-    await Promise.all(problemCards.map(p => addDoc(collection(db, "entries"), {
-      date,
-      grade,
-      semester,
-      subject: p.subject,
-      unit: p.unit || '',
-      difficulty: p.difficulty || '중',
-      questionType: p.questionType || '단답형',
-      passage: p.passage || '',
-      options: p.options || [],
-      questionText: p.questionText,
-      studentAnswer: p.studentAnswer,
-      correctAnswer: p.correctAnswer,
-      reason: p.reason || reasons[0] || '기타',
-      retried: false,
-      retriedCorrect: null,
-      starred: false,
-      consecutiveCorrect: 0,
-      graduated: false,
-      reviewStage: 0,
-      nextReviewDate: todayStr(),
-      createdAt: serverTimestamp()
-    })));
-    showToast(`오답 ${problemCards.length}개 저장했어요 ✓`);
+    const now=Date.now();
+    const items=problemCards.map((p,idx)=>({
+      id:newEntryId(),
+      date, grade, semester,
+      subject:p.subject,
+      domain:p.domain||'',
+      unit:p.unit||'',
+      concept:p.concept||'',
+      sourceType:p.sourceType||'',
+      skill:p.skill||'',
+      misconception:p.misconception||'',
+      visualDescription:p.visualDescription||'',
+      difficulty:p.difficulty||'중',
+      questionType:p.questionType||'단답형',
+      passage:p.passage||'',
+      options:p.options||[],
+      questionText:p.questionText||'',
+      mathLatex:p.mathLatex||'',
+      studentAnswer:p.studentAnswer||'',
+      correctAnswer:p.correctAnswer||'',
+      confidence:Number.isFinite(Number(p.confidence))?Number(p.confidence):null,
+      bbox:Array.isArray(p.bbox)?p.bbox:null,
+      reason:p.reason||reasons[0]||'기타',
+      retried:false,
+      retriedCorrect:null,
+      starred:false,
+      consecutiveCorrect:0,
+      graduated:false,
+      reviewStage:0,
+      nextReviewDate:todayStr(),
+      createdAtMs:now+idx,
+      reviewCounts:{}
+    }));
+    // 같은 날짜의 여러 문제를 하루 문서 1회 쓰기로 저장
+    await writeEntryDayItems(date,items);
+    entries=[...items.map(x=>({...x,dayDocId:date})),...entries]
+      .sort((a,b)=>entryTimestampMs(b)-entryTimestampMs(a));
+    localStorage.setItem(ENTRY_SYNC_KEY,String(Date.now()));
+    recomputeMonthlyReviewCount();
+    showToast(`오답 ${items.length}개 저장했어요 ✓ (Firestore 1회 쓰기)`);
     resetAddForm();
-    await loadEntries();
+    fillFilterOptions();
     renderHome(); renderList(); renderStats();
     switchTab('list');
   } catch(e){ console.error(e); showToast('저장에 실패했어요: ' + e.message, 5000); }
@@ -1440,7 +1794,7 @@ function renderBadges(){
 function renderHome(){
   document.getElementById('homeTotal').textContent = entries.length;
   const weekAgo = Date.now() - 7*24*60*60*1000;
-  const weekCount = entries.filter(e => e.createdAt && e.createdAt.toDate && e.createdAt.toDate().getTime() > weekAgo).length;
+  const weekCount = entries.filter(e => entryTimestampMs(e) > weekAgo).length;
   document.getElementById('homeWeek').textContent = weekCount;
   document.getElementById('homeGraduated').textContent = entries.filter(e => e.graduated).length;
   document.getElementById('homeStarred').textContent = entries.filter(e => e.starred).length;
@@ -1571,7 +1925,11 @@ function renderList(){
     if (starredOnly && !e.starred) return false;
     if (!showGraduated && e.graduated) return false;
     if (dueOnly && (e.graduated || (e.nextReviewDate && e.nextReviewDate > today))) return false;
-    if (searchQ && !(e.questionText||'').toLowerCase().includes(searchQ)) return false;
+    if (searchQ){
+      const hay=[e.questionText,e.passage,e.unit,e.domain,e.concept,e.sourceType,e.skill,e.misconception,e.visualDescription]
+        .filter(Boolean).join(' ').toLowerCase();
+      if(!hay.includes(searchQ)) return false;
+    }
     if (range !== 'all'){
       const days = parseInt(range);
       const cutoff = Date.now() - days*24*60*60*1000;
@@ -1601,6 +1959,9 @@ function renderList(){
     const retriedChecked = e.retried ? 'checked' : '';
     const gradeTag = e.grade ? `<span class="tag" style="background:#F0F0F5;color:#8B90A0">${e.grade}${e.semester ? ' · '+e.semester : ''}</span>` : '';
     const unitTag = e.unit ? `<span class="tag" style="background:#F0F0F5;color:#8B90A0">📘 ${e.unit}</span>` : '';
+    const conceptTag = e.concept ? `<span class="tag" style="background:#EAF7FF;color:#2673A6">🧠 ${escapeHtml(e.concept)}</span>` : '';
+    const sourceTag = e.sourceType ? `<span class="tag" style="background:#F4EEFF;color:#7451B9">🗂 ${escapeHtml(e.sourceType)}</span>` : '';
+    const skillTag = e.skill ? `<span class="tag" style="background:#E9F8F1;color:#16835F">🎯 ${escapeHtml(e.skill)}</span>` : '';
     const diffColors = { '하':['#E4F9F3','#00B894'], '중':['#FFF6E0','#E0A200'], '상':['#FFECEC','#E02020'] };
     const diffTag = e.difficulty ? `<span class="tag" style="background:${(diffColors[e.difficulty]||['#F0F0F5','#8B90A0'])[0]};color:${(diffColors[e.difficulty]||['#F0F0F5','#8B90A0'])[1]}">난이도 ${e.difficulty}</span>` : '';
     const streak = e.consecutiveCorrect || 0;
@@ -1622,6 +1983,9 @@ function renderList(){
       ? `<div class="entry-ans" style="margin-top:4px;">${e.options.map(opt => `<div>${escapeHtml(opt)}</div>`).join('')}</div>`
       : '';
     const passageHtml = e.passage ? `<div class="passage-box" onclick="toggleCardExpand('${e.id}')">${escapeHtml(e.passage)}</div>` : '';
+    const mathHtml = e.mathLatex ? `<div class="math-box">${renderMath(e.mathLatex)}</div>` : '';
+    const confidenceHtml = Number.isFinite(Number(e.confidence)) && Number(e.confidence) < 80
+      ? `<span class="tag" style="background:#FFF6E0;color:#C47F00">⚠ AI 확인 ${Math.round(Number(e.confidence))}%</span>` : '';
     return `
     <div class="entry-card ${expandedClass}">
       <div class="entry-top">
@@ -1629,11 +1993,15 @@ function renderList(){
           <span class="tag" style="background:${c[0]};color:${c[1]}">${e.subject||'기타'}</span>
           ${gradeTag}
           ${unitTag}
+          ${conceptTag}
+          ${sourceTag}
+          ${skillTag}
           ${typeTag}
           ${diffTag}
           ${streakTag}
           ${graduatedTag}
           ${reviewTag}
+          ${confidenceHtml}
           <span class="tag" style="background:#F0F0F5;color:#8B90A0">${e.date||''}</span>
           <span class="tag" style="background:#F0F0F5;color:#8B90A0">${e.reason||''}</span>
         </div>
@@ -1641,8 +2009,11 @@ function renderList(){
       </div>
       ${passageHtml}
       <div class="entry-q" onclick="toggleCardExpand('${e.id}')" style="cursor:pointer;">${escapeHtml(e.questionText||'(내용 없음)')}</div>
+      ${mathHtml}
       ${optionsHtml}
       <div class="entry-ans"><b>학생 답:</b> ${escapeHtml(e.studentAnswer||'-')} &nbsp;·&nbsp; <b>정답:</b> ${escapeHtml(e.correctAnswer||'-')}</div>
+      ${e.visualDescription ? `<div class="entry-ans"><b>시각자료:</b> ${escapeHtml(e.visualDescription)}</div>` : ''}
+      ${e.misconception ? `<div class="entry-ans"><b>오개념:</b> ${escapeHtml(e.misconception)}</div>` : ''}
       <div class="entry-actions">
         <button class="icon-btn" onclick="deleteEntry('${e.id}')">🗑 삭제</button>
         <button class="icon-btn" onclick="startHintFlow('${e.id}')">💡 힌트로 풀기</button>
@@ -1664,59 +2035,62 @@ function renderList(){
 }
 
 window.toggleStarred = async function(id, value){
-  await updateDoc(doc(db, "entries", id), { starred: value });
-  const e = entries.find(x => x.id === id); if (e) e.starred = value;
+  await updateEntryFields(id,{starred:value});
   renderList(); renderHome();
 };
 
 window.unGraduate = async function(id){
-  await updateDoc(doc(db, "entries", id), { graduated: false, consecutiveCorrect: 0 });
-  const e = entries.find(x => x.id === id); if (e){ e.graduated = false; e.consecutiveCorrect = 0; }
+  await updateEntryFields(id,{graduated:false,consecutiveCorrect:0});
   renderList(); renderHome();
 };
 
 window.deleteEntry = async function(id){
   if (!confirm('이 오답을 삭제할까요?')) return;
-  await deleteDoc(doc(db, "entries", id));
-  entries = entries.filter(e => e.id !== id);
+  await deleteEntryFromDay(id);
+  entries=entries.filter(e=>e.id!==id);
+  recomputeMonthlyReviewCount();
   renderHome(); renderList(); renderStats();
   showToast('삭제했어요');
 };
 
 window.toggleRetried = async function(id, checked){
-  await updateDoc(doc(db, "entries", id), { retried: checked, retriedCorrect: checked ? entries.find(e=>e.id===id).retriedCorrect : null });
-  const e = entries.find(x => x.id === id); e.retried = checked; if (!checked) e.retriedCorrect = null;
+  const e=entries.find(x=>x.id===id);
+  if(!e)return;
+  await updateEntryFields(id,{retried:checked,retriedCorrect:checked?e.retriedCorrect:null});
   renderList();
 };
 
 window.setRetryResult = async function(id, correct){
-  const e = entries.find(x => x.id === id);
-  const prevStreak = (e && e.consecutiveCorrect) || 0;
-  const newStreak = correct ? prevStreak + 1 : 0;
-  const graduated = newStreak >= 3;
-
-  const prevStage = (e && e.reviewStage) || 0;
-  let newStage, nextReviewDate;
-  if (correct){
-    if (prevStage < REVIEW_INTERVALS.length){
-      nextReviewDate = addDaysStr(REVIEW_INTERVALS[prevStage]);
-      newStage = prevStage + 1;
-    } else {
-      newStage = prevStage; // 이미 전 단계 통과, 더 이상 예정 없음
-      nextReviewDate = null;
+  const e=entries.find(x=>x.id===id);
+  if(!e)return;
+  const prevStreak=e.consecutiveCorrect||0;
+  const newStreak=correct?prevStreak+1:0;
+  const graduated=newStreak>=3;
+  const prevStage=e.reviewStage||0;
+  let newStage,nextReviewDate;
+  if(correct){
+    if(prevStage<REVIEW_INTERVALS.length){
+      nextReviewDate=addDaysStr(REVIEW_INTERVALS[prevStage]);
+      newStage=prevStage+1;
+    }else{
+      newStage=prevStage;
+      nextReviewDate=null;
     }
-  } else {
-    newStage = 0;
-    nextReviewDate = todayStr();
+  }else{
+    newStage=0;
+    nextReviewDate=todayStr();
   }
-
-  const today = todayStr();
-  await updateDoc(doc(db, "entries", id), { retried: true, retriedCorrect: correct, consecutiveCorrect: newStreak, graduated, reviewStage: newStage, nextReviewDate, lastReviewedAt: today });
-  if (e){ e.retried = true; e.retriedCorrect = correct; e.consecutiveCorrect = newStreak; e.graduated = graduated; e.reviewStage = newStage; e.nextReviewDate = nextReviewDate; e.lastReviewedAt = today; }
+  const today=todayStr();
+  const month=currentMonthKey();
+  const reviewCounts={...(e.reviewCounts||{}),[month]:Number(e.reviewCounts?.[month]||0)+1};
+  await updateEntryFields(id,{
+    retried:true,retriedCorrect:correct,consecutiveCorrect:newStreak,graduated,
+    reviewStage:newStage,nextReviewDate,lastReviewedAt:today,reviewCounts
+  });
   bumpMonthlyReviewCount();
   renderList(); renderStats(); renderHome();
-  if (graduated) showToast('🎓 3번 연속 정답! 이 문제는 졸업했어요');
-  else if (correct && nextReviewDate) showToast('다음 복습: ' + nextReviewDate);
+  if(graduated)showToast('🎓 3번 연속 정답! 이 문제는 졸업했어요');
+  else if(correct&&nextReviewDate)showToast('다음 복습: '+nextReviewDate);
 };
 
 /* ---------------- 통계 렌더 ---------------- */
@@ -1809,6 +2183,19 @@ function renderCalendar(){
 
 /* ---------------- 유틸 ---------------- */
 function escapeHtml(str){ const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+function renderMath(latex){
+  if (!latex) return '';
+  try {
+    if (window.katex) return window.katex.renderToString(String(latex), { throwOnError:false, displayMode:true, strict:'ignore' });
+  } catch(e){ console.warn('KaTeX render failed', e); }
+  return '<code>' + escapeHtml(String(latex)) + '</code>';
+}
+function confidenceClass(value){
+  const n = Number(value);
+  if (!Number.isFinite(n) || n >= 90) return 'confidence-high';
+  if (n >= 75) return 'confidence-mid';
+  return 'confidence-low';
+}
 function escapeAttr(str){ return escapeHtml(str).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function todayStr(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
 function addDaysStr(days){ const d = new Date(); d.setDate(d.getDate() + days); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
