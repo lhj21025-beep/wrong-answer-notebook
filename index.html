@@ -1235,6 +1235,7 @@ function renderProblemCards(){
         <span class="num-tag">문제 ${i+1}</span>
         <button class="icon-btn" onclick="removeProblemCard(${i})">🗑 삭제</button>
       </div>
+      ${p.cropBase64 ? `<img src="data:${p.cropMimeType||'image/jpeg'};base64,${p.cropBase64}" alt="문제 자동 크롭" style="width:100%;max-height:340px;object-fit:contain;border-radius:12px;background:var(--bg);margin-bottom:10px;" />` : ''}
       <label class="field-label">과목</label>
       <select onchange="updateCardField(${i},'subject',this.value)">${subjectOptions}</select>
 
@@ -1346,31 +1347,46 @@ window.saveAllEntries = async function(){
   const btn = document.getElementById('saveBtn');
   btn.disabled = true; btn.textContent = '저장 중...';
   try {
-    await Promise.all(problemCards.map(p => addDoc(collection(db, "entries"), {
-      date,
-      grade,
-      semester,
-      subject: p.subject,
-      unit: p.unit || '',
-      difficulty: p.difficulty || '중',
-      questionType: p.questionType || '단답형',
-      passage: p.passage || '',
-      options: p.options || [],
-      questionText: p.questionText,
-      mathLatex: p.mathLatex || '',
-      studentAnswer: p.studentAnswer,
-      correctAnswer: p.correctAnswer,
-      confidence: Number.isFinite(Number(p.confidence)) ? Number(p.confidence) : null,
-      reason: p.reason || reasons[0] || '기타',
-      retried: false,
-      retriedCorrect: null,
-      starred: false,
-      consecutiveCorrect: 0,
-      graduated: false,
-      reviewStage: 0,
-      nextReviewDate: todayStr(),
-      createdAt: serverTimestamp()
-    })));
+    await Promise.all(problemCards.map(async p => {
+      const entryRef = await addDoc(collection(db, "entries"), {
+        date,
+        grade,
+        semester,
+        subject: p.subject,
+        unit: p.unit || '',
+        difficulty: p.difficulty || '중',
+        questionType: p.questionType || '단답형',
+        passage: p.passage || '',
+        options: p.options || [],
+        questionText: p.questionText,
+        mathLatex: p.mathLatex || '',
+        studentAnswer: p.studentAnswer,
+        correctAnswer: p.correctAnswer,
+        confidence: Number.isFinite(Number(p.confidence)) ? Number(p.confidence) : null,
+        bbox: Array.isArray(p.bbox) ? p.bbox : null,
+        reason: p.reason || reasons[0] || '기타',
+        retried: false,
+        retriedCorrect: null,
+        starred: false,
+        consecutiveCorrect: 0,
+        graduated: false,
+        reviewStage: 0,
+        nextReviewDate: todayStr(),
+        createdAt: serverTimestamp()
+      });
+
+      if (p.cropBase64){
+        try {
+          const imageRef = storageRef(storage, 'problem-images/' + entryRef.id + '.jpg');
+          await uploadString(imageRef, p.cropBase64, 'base64', { contentType: p.cropMimeType || 'image/jpeg' });
+          const problemImageUrl = await getDownloadURL(imageRef);
+          await updateDoc(entryRef, { problemImageUrl });
+        } catch(imageErr){
+          console.warn('문제 이미지 저장 실패. 텍스트 데이터는 정상 저장했습니다.', imageErr);
+        }
+      }
+      return entryRef;
+    }));
     showToast(`오답 ${problemCards.length}개 저장했어요 ✓`);
     resetAddForm();
     await loadEntries();
@@ -1671,6 +1687,10 @@ function renderList(){
       ? `<div class="entry-ans" style="margin-top:4px;">${e.options.map(opt => `<div>${escapeHtml(opt)}</div>`).join('')}</div>`
       : '';
     const passageHtml = e.passage ? `<div class="passage-box" onclick="toggleCardExpand('${e.id}')">${escapeHtml(e.passage)}</div>` : '';
+    const mathHtml = e.mathLatex ? `<div class="math-box">${renderMath(e.mathLatex)}</div>` : '';
+    const confidenceHtml = Number.isFinite(Number(e.confidence)) && Number(e.confidence) < 80
+      ? `<span class="tag" style="background:#FFF6E0;color:#C47F00">⚠ AI 확인 ${Math.round(Number(e.confidence))}%</span>` : '';
+    const imageHtml = e.problemImageUrl ? `<img src="${escapeAttr(e.problemImageUrl)}" alt="저장된 문제 이미지" style="width:100%;max-height:360px;object-fit:contain;border-radius:12px;background:var(--bg);margin-bottom:8px;" />` : '';
     return `
     <div class="entry-card ${expandedClass}">
       <div class="entry-top">
@@ -1683,13 +1703,16 @@ function renderList(){
           ${streakTag}
           ${graduatedTag}
           ${reviewTag}
+          ${confidenceHtml}
           <span class="tag" style="background:#F0F0F5;color:#8B90A0">${e.date||''}</span>
           <span class="tag" style="background:#F0F0F5;color:#8B90A0">${e.reason||''}</span>
         </div>
         <button class="star-btn" onclick="toggleStarred('${e.id}', ${!e.starred})">${starChar}</button>
       </div>
+      ${imageHtml}
       ${passageHtml}
       <div class="entry-q" onclick="toggleCardExpand('${e.id}')" style="cursor:pointer;">${escapeHtml(e.questionText||'(내용 없음)')}</div>
+      ${mathHtml}
       ${optionsHtml}
       <div class="entry-ans"><b>학생 답:</b> ${escapeHtml(e.studentAnswer||'-')} &nbsp;·&nbsp; <b>정답:</b> ${escapeHtml(e.correctAnswer||'-')}</div>
       <div class="entry-actions">
