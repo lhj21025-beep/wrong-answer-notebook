@@ -1315,7 +1315,7 @@ window.runAiAnalysis = async function(){
     let subset;
     if (rangeVal === '30d'){
       const cutoff = Date.now() - 30*24*60*60*1000;
-      subset = entries.filter(e => e.createdAt && e.createdAt.toDate && e.createdAt.toDate().getTime() > cutoff);
+      subset = entries.filter(e => entryTimestampMs(e) > cutoff);
     } else {
       subset = entries.slice(0, parseInt(rangeVal)); // entries는 이미 최신순 정렬됨
     }
@@ -1408,6 +1408,33 @@ function renderProblemCards(){
         </div>
       </div>
 
+      <div class="btn-row">
+        <div style="flex:1;">
+          <label class="field-label">영역</label>
+          <input type="text" value="${escapeAttr(p.domain||'')}" oninput="updateCardField(${i},'domain',this.value)" placeholder="예: 지구와 우주 / 역사" />
+        </div>
+        <div style="flex:1;">
+          <label class="field-label">핵심 개념</label>
+          <input type="text" value="${escapeAttr(p.concept||'')}" oninput="updateCardField(${i},'concept',this.value)" placeholder="예: 증발과 응결" />
+        </div>
+      </div>
+      <div class="btn-row">
+        <div style="flex:1;">
+          <label class="field-label">자료 유형</label>
+          <input type="text" value="${escapeAttr(p.sourceType||'')}" oninput="updateCardField(${i},'sourceType',this.value)" placeholder="예: 실험 / 지도 / 연표 / 그래프" />
+        </div>
+        <div style="flex:1;">
+          <label class="field-label">사고 기능</label>
+          <input type="text" value="${escapeAttr(p.skill||'')}" oninput="updateCardField(${i},'skill',this.value)" placeholder="예: 자료해석 / 인과관계" />
+        </div>
+      </div>
+
+      <label class="field-label">AI가 추정한 오개념 (명확한 경우만)</label>
+      <input type="text" value="${escapeAttr(p.misconception||'')}" oninput="updateCardField(${i},'misconception',this.value)" placeholder="예: 온도가 높아야만 증발한다고 생각함" />
+
+      <label class="field-label">시각 자료 설명 (그림·지도·표·그래프·실험장치)</label>
+      <textarea oninput="updateCardField(${i},'visualDescription',this.value)" placeholder="이미지를 저장하지 않아도 복습할 수 있도록 핵심 배치·수치·범례를 기록합니다." style="min-height:72px;">${escapeHtml(p.visualDescription||'')}</textarea>
+
       <label class="field-label">지문 (있는 경우, 없으면 비워두세요)</label>
       <textarea oninput="updateCardField(${i},'passage',this.value)" placeholder="읽기 지문이 있는 문제만 여기에 원문 전체를 입력하세요" style="min-height:90px;">${escapeHtml(p.passage||'')}</textarea>
 
@@ -1483,7 +1510,7 @@ window.confirmNewReasonForCard = async function(idx){
 };
 
 window.addBlankProblemCard = function(){
-  problemCards.push({ subject:'기타', unit:'', difficulty:'중', questionType:'단답형', passage:'', options:[], questionText:'', mathLatex:'', studentAnswer:'', correctAnswer:'', confidence:100, reason: reasons[0] || '' });
+  problemCards.push({ subject:'기타', domain:'', unit:'', concept:'', sourceType:'', skill:'', misconception:'', visualDescription:'', difficulty:'중', questionType:'단답형', passage:'', options:[], questionText:'', mathLatex:'', studentAnswer:'', correctAnswer:'', confidence:100, reason: reasons[0] || '' });
   renderProblemCards();
 };
 
@@ -1501,49 +1528,48 @@ window.saveAllEntries = async function(){
   const btn = document.getElementById('saveBtn');
   btn.disabled = true; btn.textContent = '저장 중...';
   try {
-    await Promise.all(problemCards.map(async p => {
-      const entryRef = await addDoc(collection(db, "entries"), {
-        date,
-        grade,
-        semester,
-        subject: p.subject,
-        unit: p.unit || '',
-        difficulty: p.difficulty || '중',
-        questionType: p.questionType || '단답형',
-        passage: p.passage || '',
-        options: p.options || [],
-        questionText: p.questionText,
-        mathLatex: p.mathLatex || '',
-        studentAnswer: p.studentAnswer,
-        correctAnswer: p.correctAnswer,
-        confidence: Number.isFinite(Number(p.confidence)) ? Number(p.confidence) : null,
-        bbox: Array.isArray(p.bbox) ? p.bbox : null,
-        reason: p.reason || reasons[0] || '기타',
-        retried: false,
-        retriedCorrect: null,
-        starred: false,
-        consecutiveCorrect: 0,
-        graduated: false,
-        reviewStage: 0,
-        nextReviewDate: todayStr(),
-        createdAt: serverTimestamp()
-      });
-
-      if (p.cropBase64){
-        try {
-          const imageRef = storageRef(storage, 'problem-images/' + entryRef.id + '.jpg');
-          await uploadString(imageRef, p.cropBase64, 'base64', { contentType: p.cropMimeType || 'image/jpeg' });
-          const problemImageUrl = await getDownloadURL(imageRef);
-          await updateDoc(entryRef, { problemImageUrl });
-        } catch(imageErr){
-          console.warn('문제 이미지 저장 실패. 텍스트 데이터는 정상 저장했습니다.', imageErr);
-        }
-      }
-      return entryRef;
+    const now=Date.now();
+    const items=problemCards.map((p,idx)=>({
+      id:newEntryId(),
+      date, grade, semester,
+      subject:p.subject,
+      domain:p.domain||'',
+      unit:p.unit||'',
+      concept:p.concept||'',
+      sourceType:p.sourceType||'',
+      skill:p.skill||'',
+      misconception:p.misconception||'',
+      visualDescription:p.visualDescription||'',
+      difficulty:p.difficulty||'중',
+      questionType:p.questionType||'단답형',
+      passage:p.passage||'',
+      options:p.options||[],
+      questionText:p.questionText||'',
+      mathLatex:p.mathLatex||'',
+      studentAnswer:p.studentAnswer||'',
+      correctAnswer:p.correctAnswer||'',
+      confidence:Number.isFinite(Number(p.confidence))?Number(p.confidence):null,
+      bbox:Array.isArray(p.bbox)?p.bbox:null,
+      reason:p.reason||reasons[0]||'기타',
+      retried:false,
+      retriedCorrect:null,
+      starred:false,
+      consecutiveCorrect:0,
+      graduated:false,
+      reviewStage:0,
+      nextReviewDate:todayStr(),
+      createdAtMs:now+idx,
+      reviewCounts:{}
     }));
-    showToast(`오답 ${problemCards.length}개 저장했어요 ✓`);
+    // 같은 날짜의 여러 문제를 하루 문서 1회 쓰기로 저장
+    await writeEntryDayItems(date,items);
+    entries=[...items.map(x=>({...x,dayDocId:date})),...entries]
+      .sort((a,b)=>entryTimestampMs(b)-entryTimestampMs(a));
+    localStorage.setItem(ENTRY_SYNC_KEY,String(Date.now()));
+    recomputeMonthlyReviewCount();
+    showToast(`오답 ${items.length}개 저장했어요 ✓ (Firestore 1회 쓰기)`);
     resetAddForm();
-    await loadEntries();
+    fillFilterOptions();
     renderHome(); renderList(); renderStats();
     switchTab('list');
   } catch(e){ console.error(e); showToast('저장에 실패했어요: ' + e.message, 5000); }
@@ -1659,7 +1685,7 @@ function renderBadges(){
 function renderHome(){
   document.getElementById('homeTotal').textContent = entries.length;
   const weekAgo = Date.now() - 7*24*60*60*1000;
-  const weekCount = entries.filter(e => e.createdAt && e.createdAt.toDate && e.createdAt.toDate().getTime() > weekAgo).length;
+  const weekCount = entries.filter(e => entryTimestampMs(e) > weekAgo).length;
   document.getElementById('homeWeek').textContent = weekCount;
   document.getElementById('homeGraduated').textContent = entries.filter(e => e.graduated).length;
   document.getElementById('homeStarred').textContent = entries.filter(e => e.starred).length;
