@@ -898,7 +898,11 @@ window.runAnalyze = async function(){
 questionType은 "단답형"(한 단어/숫자로 답하는 문제), "객관식"(①②③④ 같은 보기 중에서 고르는 문제), "서술형"(문장으로 풀어 설명하는 문제) 중 하나로 판단하세요.
 객관식인 경우 options 배열에 보기를 각각의 항목으로 순서대로 모두 담고(예: "① 15", "② 20"...), correctAnswer와 studentAnswer는 정답/학생이 고른 보기의 번호만 적으세요(예: "3").
 국어 지문형 문제, 영어 지문형 문제처럼 읽기 지문(이야기글/설명문/대화문 등)이 딸린 문제는, 그 지문 전체를 절대 요약하지 말고 원문 그대로 passage 필드에 옮겨 적으세요(줄바꿈 포함해도 됩니다). questionText에는 지문 내용을 넣지 말고 실제로 묻는 질문 문장만 담으세요. 지문이 없는 문제는 passage를 빈 문자열로 두세요.\n수학 문제에 분수, 대분수, 소수, 괄호, 제곱, 비례식 등 수식이 있으면 원래 모양을 최대한 보존해서 questionText에 적고, 별도로 mathLatex 필드에는 LaTeX 수식으로 적으세요. 예: \\frac{3}{4}+\\frac{2}{5}. 수식이 없으면 mathLatex는 빈 문자열로 두세요.\nconfidence는 문제/지문/답을 이미지에서 얼마나 확실히 읽었는지 0~100 정수로 평가하세요. 흐리거나 잘렸거나 수식·도형 판독이 애매하면 낮게 주세요. 정답을 확실히 알 수 없으면 억지로 추측하지 말고 correctAnswer를 빈 문자열로 두세요.\nbbox는 해당 문제 전체(지문, 질문, 보기, 학생답 표시까지 포함)의 영역을 [x,y,width,height]로 적으세요. 값은 이미지 왼쪽 위 0,0에서 오른쪽 아래 1000,1000까지의 상대 좌표입니다.
-{"problems":[{"subject":"국어/수학/영어/사회/과학 중 추정되는 과목(모르면 빈 문자열)","unit":"이 문제가 속한 단원 추정(예: 분수, 소수, 도형, 독해, 어휘, 문법 등. 모르면 빈 문자열)","difficulty":"하/중/상 중 추정 난이도","questionType":"단답형/객관식/서술형 중 하나","passage":"읽기 지문이 있으면 전체 원문 그대로, 없으면 빈 문자열","questionText":"실제로 묻는 질문 문장만","mathLatex":"수식이 있으면 LaTeX, 없으면 빈 문자열","options":["객관식인 경우 보기 목록, 아니면 빈 배열"],"studentAnswer":"학생이 작성한 답(보이면 적고 안 보이면 빈 문자열)","correctAnswer":"정답(확실한 경우만, 아니면 빈 문자열)","confidence":95,"bbox":[80,120,840,260]}]}`;
+과학 문제는 실험·관찰·그래프·표·회로도·생물/지구과학 그림을 중요 자료로 보고, domain에는 생명/물질/운동과에너지/지구와우주 등 큰 영역, concept에는 핵심 개념, sourceType에는 실험/관찰/그래프/표/그림/회로도/일반지문 중 가장 적절한 유형, skill에는 개념이해/자료해석/원인추론/실험설계/계산/적용 중 핵심 사고 기능을 적으세요.
+사회 문제는 지도·연표·사료·사진·통계표·그래프 자료를 중요하게 보고, domain에는 지리/역사/정치/경제/사회문화 등 큰 영역, concept에는 핵심 개념, sourceType에는 지도/연표/사료/사진/통계표/그래프/일반지문 중 가장 적절한 유형, skill에는 개념이해/자료해석/비교/인과관계/시대판단/공간판단/적용 중 핵심 사고 기능을 적으세요.
+국어·수학·영어도 가능한 경우 domain, concept, skill을 채우세요. misconception에는 학생 답에서 드러나는 대표 오개념이나 잘못된 판단이 명확할 때만 한 문장으로 적고, 불명확하면 빈 문자열로 두세요.
+visualDescription에는 그림·지도·그래프·표·실험장치처럼 문제 해결에 필요한 시각 자료를 나중에 이미지 없이도 이해할 수 있게 핵심 정보와 수치/범례/축/배치를 구체적으로 텍스트로 설명하세요. 시각 자료가 없으면 빈 문자열로 두세요.
+{"problems":[{"subject":"국어/수학/영어/사회/과학 중 추정되는 과목(모르면 빈 문자열)","unit":"이 문제가 속한 단원 추정(예: 분수, 소수, 도형, 독해, 어휘, 문법 등. 모르면 빈 문자열)","difficulty":"하/중/상 중 추정 난이도","questionType":"단답형/객관식/서술형 중 하나","passage":"읽기 지문이 있으면 전체 원문 그대로, 없으면 빈 문자열","questionText":"실제로 묻는 질문 문장만","mathLatex":"수식이 있으면 LaTeX, 없으면 빈 문자열","options":["객관식인 경우 보기 목록, 아니면 빈 배열"],"studentAnswer":"학생이 작성한 답(보이면 적고 안 보이면 빈 문자열)","correctAnswer":"정답(확실한 경우만, 아니면 빈 문자열)","confidence":95,"bbox":[80,120,840,260],"domain":"큰 영역","concept":"핵심 개념","sourceType":"자료 유형","skill":"핵심 사고 기능","misconception":"명확한 오개념 또는 빈 문자열","visualDescription":"시각 자료 설명 또는 빈 문자열"}]}`;
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -938,6 +942,12 @@ questionType은 "단답형"(한 단어/숫자로 답하는 문제), "객관식"(
         studentAnswer: p.studentAnswer || '',
         correctAnswer: p.correctAnswer || '',
         confidence: Number.isFinite(Number(p.confidence)) ? Math.max(0, Math.min(100, Math.round(Number(p.confidence)))) : 70,
+        domain: p.domain || '',
+        concept: p.concept || '',
+        sourceType: p.sourceType || '',
+        skill: p.skill || '',
+        misconception: p.misconception || '',
+        visualDescription: p.visualDescription || '',
         bbox,
         cropBase64: crop?.base64 || null,
         cropMimeType: crop?.mimeType || null,
