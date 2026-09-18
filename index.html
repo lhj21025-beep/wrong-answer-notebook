@@ -450,6 +450,15 @@
         <label class="toggle-chip"><input type="checkbox" id="s_darkMode" onchange="toggleDarkMode(this.checked)" /> 🌙 다크 모드</label>
       </div>
       <div class="card">
+        <div class="section-title" style="margin:0 0 8px;">💾 무료 용량 최적화</div>
+        <div class="entry-ans" style="line-height:1.8;">
+          문제 사진은 AI 인식과 자동 크롭에만 임시로 사용하고 클라우드에는 저장하지 않아요.<br/>
+          과학·사회 그림/지도/그래프는 AI가 <b>시각 자료 설명</b>으로 텍스트화해 남깁니다.<br/>
+          오답 데이터는 같은 날짜의 문제를 한 문서에 묶고 브라우저 캐시를 사용해 Firestore 읽기/쓰기를 줄입니다.
+        </div>
+        <button class="btn btn-ghost" style="margin-top:12px;" onclick="forceCloudSync()">🔄 지금 클라우드 동기화</button>
+      </div>
+      <div class="card">
         <label class="field-label">📥 데이터 내보내기</label>
         <div class="entry-ans" style="margin-bottom:10px;">전체 오답 데이터를 엑셀에서 열 수 있는 CSV 파일로 내려받아요.</div>
         <button class="btn btn-ghost" onclick="exportCSV()">CSV로 내보내기</button>
@@ -660,9 +669,9 @@ window.toggleDarkMode = function(checked){
 
 window.exportCSV = function(){
   if (entries.length === 0){ showToast('내보낼 데이터가 없어요'); return; }
-  const headers = ['날짜','학년','학기','과목','단원','난이도','문제유형','지문','문제','보기','학생답','정답','오답사유','즐겨찾기','졸업여부','연속정답','다음복습일'];
+  const headers = ['날짜','학년','학기','과목','영역','단원','핵심개념','자료유형','사고기능','오개념','시각자료설명','난이도','문제유형','지문','문제','보기','학생답','정답','오답사유','즐겨찾기','졸업여부','연속정답','다음복습일'];
   const rows = entries.map(e => [
-    e.date||'', e.grade||'', e.semester||'', e.subject||'', e.unit||'', e.difficulty||'', e.questionType||'단답형',
+    e.date||'', e.grade||'', e.semester||'', e.subject||'', e.domain||'', e.unit||'', e.concept||'', e.sourceType||'', e.skill||'', e.misconception||'', e.visualDescription||'', e.difficulty||'', e.questionType||'단답형',
     e.passage||'', e.questionText||'', (Array.isArray(e.options)?e.options.join(' / '):''), e.studentAnswer||'', e.correctAnswer||'',
     e.reason||'', e.starred ? 'Y' : 'N', e.graduated ? 'Y' : 'N', e.consecutiveCorrect||0, e.nextReviewDate||''
   ]);
@@ -713,19 +722,34 @@ function checkMarchGradeBump(){
 }
 
 async function loadReasons(){
-  try {
-    const snap = await getDocs(collection(db, "reasons"));
-    reasons = snap.docs.map(d => d.data().name);
-    if (reasons.length === 0){
-      for (const r of DEFAULT_REASONS) await addDoc(collection(db, "reasons"), { name: r });
-      reasons = [...DEFAULT_REASONS];
-    } else {
-      // 기존 사용자: 새로 추가된 기본 오답사유 중 없는 것만 추가 (기존 커스텀 이유는 그대로 유지)
-      const missing = DEFAULT_REASONS.filter(r => !reasons.includes(r));
-      for (const r of missing) await addDoc(collection(db, "reasons"), { name: r });
-      reasons = reasons.concat(missing);
+  const CUSTOM_REASON_DOC='customReasons';
+  const LEGACY_REASON_MIGRATION_KEY='oedapnote_reasons_migrated_v2';
+  try{
+    const snap=await getDoc(doc(db,'settings',CUSTOM_REASON_DOC));
+    let custom=Array.isArray(snap.data()?.items) ? snap.data().items.filter(Boolean) : [];
+    if(!localStorage.getItem(LEGACY_REASON_MIGRATION_KEY)){
+      try{
+        const legacy=await getDocs(collection(db,'reasons'));
+        const legacyNames=legacy.docs.map(d=>d.data().name).filter(Boolean);
+        const migrated=legacyNames.filter(r=>!DEFAULT_REASONS.includes(r));
+        custom=[...new Set([...custom,...migrated])];
+        if(migrated.length || !snap.exists()) await setDoc(doc(db,'settings',CUSTOM_REASON_DOC),{items:custom},{merge:true});
+      }catch(e){ console.debug('legacy reasons migration skipped',e); }
+      localStorage.setItem(LEGACY_REASON_MIGRATION_KEY,'1');
     }
-  } catch(e){ reasons = [...DEFAULT_REASONS]; console.error(e); }
+    reasons=[...DEFAULT_REASONS,...custom.filter(r=>!DEFAULT_REASONS.includes(r))];
+  }catch(e){
+    reasons=[...DEFAULT_REASONS];
+    console.error(e);
+  }
+  fillReasonSelects();
+}
+async function saveCustomReason(name){
+  const val=String(name||'').trim();
+  if(!val || reasons.includes(val)) return;
+  reasons.push(val);
+  const custom=reasons.filter(r=>!DEFAULT_REASONS.includes(r));
+  await setDoc(doc(db,'settings','customReasons'),{items:custom},{merge:true});
   fillReasonSelects();
 }
 
@@ -1244,8 +1268,8 @@ window.saveSimilarProblem = async function(id){
   try {
     const practiceReason = '유사문제 연습';
     if (!reasons.includes(practiceReason)){
-      await addDoc(collection(db, "reasons"), { name: practiceReason });
       reasons.push(practiceReason);
+      fillReasonSelects();
     }
     await addDoc(collection(db, "entries"), {
       date: todayStr(),
@@ -1453,11 +1477,7 @@ window.confirmNewReasonForCard = async function(idx){
   const input = document.getElementById('newReasonInput-' + idx);
   const val = input.value.trim();
   if (!val) return;
-  if (!reasons.includes(val)){
-    await addDoc(collection(db, "reasons"), { name: val });
-    reasons.push(val);
-    fillReasonSelects();
-  }
+  if (!reasons.includes(val)) await saveCustomReason(val);
   problemCards[idx].reason = val;
   renderProblemCards();
 };
@@ -1770,7 +1790,11 @@ function renderList(){
     if (starredOnly && !e.starred) return false;
     if (!showGraduated && e.graduated) return false;
     if (dueOnly && (e.graduated || (e.nextReviewDate && e.nextReviewDate > today))) return false;
-    if (searchQ && !(e.questionText||'').toLowerCase().includes(searchQ)) return false;
+    if (searchQ){
+      const hay=[e.questionText,e.passage,e.unit,e.domain,e.concept,e.sourceType,e.skill,e.misconception,e.visualDescription]
+        .filter(Boolean).join(' ').toLowerCase();
+      if(!hay.includes(searchQ)) return false;
+    }
     if (range !== 'all'){
       const days = parseInt(range);
       const cutoff = Date.now() - days*24*60*60*1000;
@@ -1824,7 +1848,6 @@ function renderList(){
     const mathHtml = e.mathLatex ? `<div class="math-box">${renderMath(e.mathLatex)}</div>` : '';
     const confidenceHtml = Number.isFinite(Number(e.confidence)) && Number(e.confidence) < 80
       ? `<span class="tag" style="background:#FFF6E0;color:#C47F00">⚠ AI 확인 ${Math.round(Number(e.confidence))}%</span>` : '';
-    const imageHtml = e.problemImageUrl ? `<img src="${escapeAttr(e.problemImageUrl)}" alt="저장된 문제 이미지" style="width:100%;max-height:360px;object-fit:contain;border-radius:12px;background:var(--bg);margin-bottom:8px;" />` : '';
     return `
     <div class="entry-card ${expandedClass}">
       <div class="entry-top">
@@ -1843,7 +1866,6 @@ function renderList(){
         </div>
         <button class="star-btn" onclick="toggleStarred('${e.id}', ${!e.starred})">${starChar}</button>
       </div>
-      ${imageHtml}
       ${passageHtml}
       <div class="entry-q" onclick="toggleCardExpand('${e.id}')" style="cursor:pointer;">${escapeHtml(e.questionText||'(내용 없음)')}</div>
       ${mathHtml}
