@@ -704,7 +704,7 @@ window.goToDueReview = function(){
 async function handleFileSelected(e){
   const file = e.target.files[0];
   if (!file) return;
-  const compressed = await compressImage(file, 1024, 0.75);
+  // 분수·작은 글씨·긴 지문의 인식 정확도를 위해 고해상도를 유지합니다.\n  const compressed = await compressImage(file, 2200, 0.90);
   currentImage = compressed;
   document.getElementById('previewImg').src = 'data:' + compressed.mimeType + ';base64,' + compressed.base64;
   document.getElementById('previewImg').style.display = 'block';
