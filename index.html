@@ -620,15 +620,22 @@ function fillGradeSelects(){
 function currentMonthKey(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
 
 async function loadMonthlyStats(){
-  try {
-    const snap = await getDoc(doc(db, "monthlyStats", currentMonthKey()));
-    monthlyReviewCount = snap.exists() ? (snap.data().reviewCount || 0) : 0;
-  } catch(e){ console.error(e); monthlyReviewCount = 0; }
+  // 별도 monthlyStats 문서를 읽지 않습니다.
+  // entryDays 로딩 후 각 오답의 reviewCounts를 합산해 계산합니다.
+  monthlyReviewCount = 0;
+}
+
+function recomputeMonthlyReviewCount(){
+  const key=currentMonthKey();
+  monthlyReviewCount=entries.reduce((sum,e)=>{
+    const saved=Number(e.reviewCounts?.[key]||0);
+    if(saved) return sum+saved;
+    return sum + ((e.lastReviewedAt||'').startsWith(key) ? 1 : 0);
+  },0);
 }
 
 function bumpMonthlyReviewCount(){
   monthlyReviewCount++;
-  setDoc(doc(db, "monthlyStats", currentMonthKey()), { reviewCount: increment(1) }, { merge: true }).catch(e => console.error(e));
 }
 
 async function loadSettings(){
@@ -722,14 +729,76 @@ async function loadReasons(){
   fillReasonSelects();
 }
 
-async function loadEntries(){
-  try {
-    const q = query(collection(db, "entries"), orderBy("createdAt", "desc"));
-    const snap = await getDocs(q);
-    entries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch(e){ console.error(e); entries = []; }
+async function migrateLegacyEntries(){
+  const legacyQ=query(collection(db,'entries'),orderBy('createdAt','desc'));
+  const legacySnap=await getDocs(legacyQ);
+  if(legacySnap.empty){
+    localStorage.setItem(ENTRY_DAYS_MIGRATION_KEY,'1');
+    return [];
+  }
+  const byDay=new Map();
+  legacySnap.docs.forEach(d=>{
+    const raw={id:d.id,...d.data()};
+    const date=raw.date||todayStr();
+    const item={...raw,createdAtMs:entryTimestampMs(raw)||Date.now()};
+    const map=byDay.get(date)||{};
+    map[entryFieldKey(item.id)]=item;
+    byDay.set(date,map);
+  });
+  const days=[...byDay.entries()];
+  for(let i=0;i<days.length;i+=400){
+    const batch=writeBatch(db);
+    days.slice(i,i+400).forEach(([date,map])=>{
+      batch.set(doc(db,'entryDays',date),{date,entries:map},{merge:true});
+    });
+    await batch.commit();
+  }
+  localStorage.setItem(ENTRY_DAYS_MIGRATION_KEY,'1');
+  return legacySnap.docs.map(d=>{
+    const raw={id:d.id,...d.data()};
+    return {...raw,createdAtMs:entryTimestampMs(raw)||Date.now(),dayDocId:raw.date||todayStr()};
+  }).sort((a,b)=>entryTimestampMs(b)-entryTimestampMs(a));
+}
+
+async function loadEntries(forceServer=false){
+  const q=query(collection(db,'entryDays'),orderBy('date','desc'));
+  let loadedFromCache=false;
+  try{
+    const cached=await getDocsFromCache(q);
+    if(!cached.empty){
+      entries=flattenEntryDays(cached);
+      loadedFromCache=true;
+    }
+  }catch(e){ console.debug('entryDays cache miss'); }
+
+  const needServer=forceServer || !loadedFromCache || shouldSyncEntriesFromServer();
+  if(needServer){
+    try{
+      const snap=await getDocs(q);
+      if(!snap.empty){
+        entries=flattenEntryDays(snap);
+        localStorage.setItem(ENTRY_DAYS_MIGRATION_KEY,'1');
+      }else if(!localStorage.getItem(ENTRY_DAYS_MIGRATION_KEY)){
+        entries=await migrateLegacyEntries();
+      }else{
+        entries=[];
+      }
+      localStorage.setItem(ENTRY_SYNC_KEY,String(Date.now()));
+    }catch(e){
+      console.error(e);
+      if(!loadedFromCache) entries=[];
+    }
+  }
+  recomputeMonthlyReviewCount();
   fillFilterOptions();
 }
+
+window.forceCloudSync=async function(){
+  localStorage.removeItem(ENTRY_SYNC_KEY);
+  await loadEntries(true);
+  renderHome(); renderList(); renderStats();
+  showToast('클라우드와 동기화했어요 ✓');
+};
 
 function fillReasonSelects(){
   const filterReason = document.getElementById('filterReason');
